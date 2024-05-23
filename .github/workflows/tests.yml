@@ -14,8 +14,11 @@ jobs:
     runs-on: ${{matrix.os}}
 
     steps:
-    - name: Clone Repo
-      uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install Submodules
+      run: git submodule update --init --recursive
 
     - name: Setup Zig
       uses: goto-bus-stop/setup-zig@v2
