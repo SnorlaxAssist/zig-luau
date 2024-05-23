@@ -17,9 +17,6 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Install Submodules
-      run: git submodule update --init --recursive
-
     - name: Setup Zig
       uses: goto-bus-stop/setup-zig@v2
       with:

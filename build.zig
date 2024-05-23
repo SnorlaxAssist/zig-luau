@@ -9,6 +9,16 @@ pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
     b.top_level_steps = .{};
 
+    const git_install_modules = b.step("submodules", "Run Git Submodule Update");
+
+    const submodules = b.addSystemCommand(&.{"git"});
+    submodules.addArg("submodule");
+    submodules.addArg("update");
+    submodules.addArg("--init");
+    submodules.addArg("--recursive");
+
+    git_install_modules.dependOn(&submodules.step);
+
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -28,7 +38,7 @@ pub fn build(b: *Build) !void {
     zigluau.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
 
     const lib = try buildLuau(b, target, optimize, use_4_vector);
-
+    lib.step.dependOn(git_install_modules);
     b.installArtifact(lib);
 
     zigluau.addIncludePath(b.path("lib/Luau/Common/include"));
