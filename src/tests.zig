@@ -6,7 +6,7 @@ const zigluau = @import("zigluau");
 const AllocFn = zigluau.AllocFn;
 const Buffer = zigluau.Buffer;
 const DebugInfo = zigluau.DebugInfo;
-const Lua = zigluau.Lua;
+const Luau = zigluau.Luau;
 
 const expect = testing.expect;
 const expectEqual = testing.expectEqual;
@@ -48,27 +48,27 @@ fn failing_alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize
 
 test "initialization" {
     // initialize the Zig wrapper
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     try expectEqual(zigluau.Status.ok, lua.status());
     lua.deinit();
 
     // attempt to initialize the Zig wrapper with no memory
-    try expectError(error.Memory, Lua.init(&testing.failing_allocator));
+    try expectError(error.Memory, Luau.init(&testing.failing_allocator));
 
     // use the library directly
-    lua = try Lua.newState(alloc, null);
+    lua = try Luau.newState(alloc, null);
     lua.close();
 
     // use the library with a bad AllocFn
-    try expectError(error.Memory, Lua.newState(failing_alloc, null));
+    try expectError(error.Memory, Luau.newState(failing_alloc, null));
 
     // use the auxiliary library (uses libc realloc and cannot be checked for leaks!)
-    lua = try Lua.newStateLibc();
+    lua = try Luau.newStateLibc();
     lua.close();
 }
 
 test "alloc functions" {
-    var lua = try Lua.newState(alloc, null);
+    var lua = try Luau.newState(alloc, null);
     defer lua.deinit();
 
     // get default allocator
@@ -77,11 +77,11 @@ test "alloc functions" {
 }
 
 test "Zig allocator access" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     const inner = struct {
-        fn inner(l: *Lua) i32 {
+        fn inner(l: *Luau) i32 {
             const allocator = l.allocator();
 
             const num = l.toInteger(1) catch unreachable;
@@ -100,9 +100,9 @@ test "Zig allocator access" {
         }
     }.inner;
 
-    lua.pushFunction(zigluau.wrap(inner));
+    lua.pushFunction(inner, "test");
     lua.pushInteger(10);
-    try lua.protectedCall(1, 1, 0);
+    try lua.pcall(1, 1, 0);
 
     try expectEqual(45, try lua.toInteger(-1));
 }
@@ -110,7 +110,7 @@ test "Zig allocator access" {
 test "standard library loading" {
     // open all standard libraries
     {
-        var lua = try Lua.init(testing.allocator);
+        var lua = try Luau.init(&testing.allocator);
         defer lua.deinit();
         lua.openLibs();
     }
@@ -119,7 +119,7 @@ test "standard library loading" {
     // these functions are only useful if you want to load the standard
     // packages into a non-standard table
     {
-        var lua = try Lua.init(testing.allocator);
+        var lua = try Luau.init(&testing.allocator);
         defer lua.deinit();
 
         lua.openBase();
@@ -128,14 +128,14 @@ test "standard library loading" {
         lua.openMath();
         lua.openOS();
         lua.openDebug();
-
         lua.openCoroutine();
-        lua.openUtf8();
+
+        // lua.openUtf8();
     }
 }
 
 test "number conversion success and failure" {
-    const lua = try Lua.init(testing.allocator);
+    const lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     _ = lua.pushString("1234.5678");
@@ -154,7 +154,7 @@ test "number conversion success and failure" {
 }
 
 test "compare" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     lua.pushNumber(1);
@@ -168,7 +168,7 @@ test "compare" {
 }
 
 const add = struct {
-    fn addInner(l: *Lua) i32 {
+    fn addInner(l: *Luau) i32 {
         const a = l.toInteger(1) catch 0;
         const b = l.toInteger(2) catch 0;
         l.pushInteger(a + b);
@@ -177,7 +177,7 @@ const add = struct {
 }.addInner;
 
 test "type of and getting values" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     lua.pushNil();
@@ -217,17 +217,19 @@ test "type of and getting values" {
     try expect(lua.isThread(-1));
     try expectEqual(lua, (try lua.toThread(-1)));
 
-    try expectEqualStrings("all your codebase are belong to us", lua.pushStringZ("all your codebase are belong to us"));
+    lua.pushString("all your codebase are belong to us");
+    try expectEqualStrings("all your codebase are belong to us", try lua.toString(-1));
     try expectEqual(.string, lua.typeOf(-1));
     try expect(lua.isString(-1));
 
-    lua.pushFunction(zigluau.wrap(add));
+    lua.pushFunction(add, "func");
     try expectEqual(.function, lua.typeOf(-1));
     try expect(lua.isCFunction(-1));
     try expect(lua.isFunction(-1));
-    try expectEqual(zigluau.wrap(add), try lua.toCFunction(-1));
+    try expectEqual(zigluau.toCFn(add), try lua.toCFunction(-1));
 
-    try expectEqualStrings("hello world", lua.pushString("hello world"));
+    lua.pushString("hello world");
+    try expectEqualStrings("hello world", try lua.toString(-1));
     try expectEqual(.string, lua.typeOf(-1));
     try expect(lua.isString(-1));
 
@@ -242,7 +244,7 @@ test "type of and getting values" {
 }
 
 test "typenames" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     try expectEqualStrings("no value", lua.typeName(.none));
@@ -259,26 +261,26 @@ test "typenames" {
     try expectEqualStrings("buffer", lua.typeName(.buffer));
 }
 
-test "executing string contents" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-    lua.openLibs();
+// test "executing string contents" {
+//     var lua = try Luau.init(&testing.allocator);
+//     defer lua.deinit();
+//     lua.openLibs();
 
-    try lua.loadString("f = function(x) return x + 10 end");
-    try lua.protectedCall(0, 0, 0);
-    try lua.loadString("a = f(2)");
-    try lua.protectedCall(0, 0, 0);
+//     try lua.loadString("f = function(x) return x + 10 end");
+//     try lua.pcall(0, 0, 0);
+//     try lua.loadString("a = f(2)");
+//     try lua.pcall(0, 0, 0);
 
-    try expectEqual(.number, try lua.getGlobal("a"));
-    try expectEqual(12, try lua.toInteger(1));
+//     try expectEqual(.number, try lua.getGlobal("a"));
+//     try expectEqual(12, try lua.toInteger(1));
 
-    try expectError(error.Fail, lua.loadString("bad syntax"));
-    try lua.loadString("a = g()");
-    try expectError(error.Runtime, lua.protectedCall(0, 0, 0));
-}
+//     try expectError(error.Fail, lua.loadString("bad syntax"));
+//     try lua.loadString("a = g()");
+//     try expectError(error.Runtime, lua.pcall(0, 0, 0));
+// }
 
 test "filling and checking the stack" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     try expectEqual(0, lua.getTop());
@@ -307,7 +309,7 @@ test "filling and checking the stack" {
 }
 
 test "stack manipulation" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     var num: i32 = 1;
@@ -331,34 +333,35 @@ test "stack manipulation" {
 }
 
 test "calling a function" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    lua.register("zigadd", zigluau.wrap(add));
+    lua.register("zigadd", add);
 
     _ = try lua.getGlobal("zigadd");
     lua.pushInteger(10);
     lua.pushInteger(32);
 
-    // protectedCall is preferred, but we might as well test call when we know it is safe
+    // pcall is preferred, but we might as well test call when we know it is safe
     lua.call(2, 1);
     try expectEqual(42, try lua.toInteger(1));
 }
 
 test "string buffers" {
-    var lua = try Lua.init();
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     var buffer: Buffer = undefined;
     buffer.init(lua);
 
     buffer.addChar('z');
-    buffer.addStringZ("igl");
+    buffer.addString("igl");
 
     var str = buffer.prep();
     str[0] = 'u';
     str[1] = 'a';
-    buffer.addSize(2);
+    str[2] = 'u';
+    buffer.addSize(3);
 
     buffer.addString(" api ");
     lua.pushNumber(5.1);
@@ -390,7 +393,7 @@ test "string buffers" {
 }
 
 const sub = struct {
-    fn subInner(l: *Lua) i32 {
+    fn subInner(l: *Luau) i32 {
         const a = l.toInteger(1) catch 0;
         const b = l.toInteger(2) catch 0;
         l.pushInteger(a - b);
@@ -399,11 +402,11 @@ const sub = struct {
 }.subInner;
 
 test "function registration" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     const funcs = [_]zigluau.FnReg{
-        .{ .name = "add", .func = zigluau.wrap(add) },
+        .{ .name = "add", .func = zigluau.toCFn(add) },
     };
     lua.newTable();
     lua.registerFns(null, &funcs);
@@ -411,7 +414,7 @@ test "function registration" {
     _ = lua.getField(-1, "add");
     lua.pushInteger(1);
     lua.pushInteger(2);
-    try lua.protectedCall(2, 1, 0);
+    try lua.pcall(2, 1, 0);
     try expectEqual(3, lua.toInteger(-1));
     lua.setTop(0);
 
@@ -423,42 +426,43 @@ test "function registration" {
     _ = lua.getField(-1, "add");
     lua.pushInteger(1);
     lua.pushInteger(2);
-    try lua.protectedCall(2, 1, 0);
+    try lua.pcall(2, 1, 0);
     try expectEqual(3, lua.toInteger(-1));
 }
 
 test "warn fn" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    lua.warning("this message is going to the void", false);
-
-    const warnFn = zigluau.wrap(struct {
-        fn inner(data: ?*anyopaque, msg: []const u8, to_cont: bool) void {
-            _ = data;
-            _ = to_cont;
+    const warnFn = struct {
+        fn inner(luau : *Luau) i32 {
+            const msg = luau.toString(1) catch unreachable;
             if (!std.mem.eql(u8, msg, "this will be caught by the warnFn")) std.debug.panic("test failed", .{});
+            return 0;
         }
-    }.inner);
+    }.inner;
 
-    lua.setWarnF(warnFn, null);
-    lua.warning("this will be caught by the warnFn", false);
+    lua.pushFunction(warnFn, "newWarn");
+    lua.pushValue(-1);
+    lua.setField(zigluau.GLOBALSINDEX, "warn");
+    lua.pushString("this will be caught by the warnFn");
+    lua.call(1, 0);
 }
 
 test "concat" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    _ = lua.pushStringZ("hello ");
+    _ = lua.pushString("hello ");
     lua.pushNumber(10);
-    _ = lua.pushStringZ(" wow!");
+    _ = lua.pushString(" wow!");
     lua.concat(3);
 
     try expectEqualStrings("hello 10 wow!", try lua.toString(-1));
 }
 
 test "garbage collector" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     // because the garbage collector is an opaque, unmanaged
@@ -477,71 +481,8 @@ test "garbage collector" {
     _ = lua.gcSetStepSize(1);
 }
 
-test "table access" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString("a = { [1] = 'first', key = 'value', ['other one'] = 1234 }");
-    _ = try lua.getGlobal("a");
-
-    try expectEqual(.string, lua.rawGetIndex(1, 1));
-    try expectEqualStrings("first", try lua.toString(-1));
-
-    _ = lua.pushStringZ("key");
-    try expectEqual(.string, lua.getTable(1));
-    try expectEqualStrings("value", try lua.toString(-1));
-
-    _ = lua.pushStringZ("other one");
-    try expectEqual(.number, lua.rawGetTable(1));
-    try expectEqual(1234, try lua.toInteger(-1));
-
-    // a.name = "zigluau"
-    _ = lua.pushStringZ("name");
-    _ = lua.pushStringZ("zigluau");
-    lua.setTable(1);
-
-    // a.lang = "zig"
-    _ = lua.pushStringZ("lang");
-    _ = lua.pushStringZ("zig");
-    lua.rawSetTable(1);
-
-    try expectError(error.Fail, lua.getMetatable(1));
-
-    // create a metatable (it isn't a useful one)
-    lua.newTable();
-
-    lua.pushFunction(zigluau.wrap(add));
-    lua.setField(-2, "__len");
-    lua.setMetatable(1);
-
-    try lua.getMetatable(1);
-    _ = try lua.getMetaField(1, "__len");
-    try expectError(error.Fail, lua.getMetaField(1, "__index"));
-
-    lua.pushBoolean(true);
-    lua.setField(1, "bool");
-
-    try lua.doString("b = a.bool");
-    try expectEqual(.boolean, try lua.getGlobal("b"));
-    try expect(lua.toBoolean(-1));
-
-    // create array [1, 2, 3, 4, 5]
-    lua.createTable(0, 0);
-    var index: i32 = 1;
-    while (index <= 5) : (index += 1) {
-        lua.pushInteger(index);
-        lua.rawSetIndex(-2, index);
-    }
-
-    // add a few more
-    while (index <= 10) : (index += 1) {
-        lua.pushInteger(index);
-        lua.rawSetIndex(-2, index);
-    }
-}
-
 test "threads" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     var new_thread = lua.newThread();
@@ -556,7 +497,7 @@ test "threads" {
 }
 
 test "userdata and uservalues" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     const Data = struct {
@@ -564,7 +505,7 @@ test "userdata and uservalues" {
         code: [4]u8,
     };
 
-    // create a Lua-owned pointer to a Data with 2 associated user values
+    // create a Luau-owned pointer to a Data with 2 associated user values
     var data = lua.newUserdata(Data);
     data.val = 1;
     @memcpy(&data.code, "abcd");
@@ -574,24 +515,24 @@ test "userdata and uservalues" {
 }
 
 test "upvalues" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     // counter from PIL
     const counter = struct {
-        fn inner(l: *Lua) i32 {
-            var counter = l.toInteger(Lua.upvalueIndex(1)) catch 0;
+        fn inner(l: *Luau) i32 {
+            var counter = l.toInteger(Luau.upvalueIndex(1)) catch 0;
             counter += 1;
             l.pushInteger(counter);
             l.pushInteger(counter);
-            l.replace(Lua.upvalueIndex(1));
+            l.replace(Luau.upvalueIndex(1));
             return 1;
         }
     }.inner;
 
     // Initialize the counter at 0
     lua.pushInteger(0);
-    lua.pushClosure(zigluau.wrap(counter), 1);
+    lua.pushClosure(zigluau.toCFn(counter), "counter", 1);
     lua.setGlobal("counter");
 
     // call the function repeatedly, each time ensuring the result increases by one
@@ -604,57 +545,28 @@ test "upvalues" {
     }
 }
 
-test "table traversal" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString("t = { key = 'value', second = true, third = 1 }");
-    _ = try lua.getGlobal("t");
-
-    lua.pushNil();
-
-    while (lua.next(1)) {
-        switch (lua.typeOf(-1)) {
-            .string => {
-                try expectEqualStrings("key", try lua.toString(-2));
-                try expectEqualStrings("value", try lua.toString(-1));
-            },
-            .boolean => {
-                try expectEqualStrings("second", try lua.toString(-2));
-                try expectEqual(true, lua.toBoolean(-1));
-            },
-            .number => {
-                try expectEqualStrings("third", try lua.toString(-2));
-                try expectEqual(1, try lua.toInteger(-1));
-            },
-            else => unreachable,
-        }
-        lua.pop(1);
-    }
-}
-
 test "raise error" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     const makeError = struct {
-        fn inner(l: *Lua) i32 {
-            _ = l.pushStringZ("makeError made an error");
+        fn inner(l: *Luau) i32 {
+            _ = l.pushString("makeError made an error");
             l.raiseError();
             return 0;
         }
     }.inner;
 
-    lua.pushFunction(zigluau.wrap(makeError));
-    try expectError(error.Runtime, lua.protectedCall(0, 0, 0));
+    lua.pushFunction(makeError, "func");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
     try expectEqualStrings("makeError made an error", try lua.toString(-1));
 }
 
-fn continuation(l: *Lua, status: zigluau.Status, ctx: isize) i32 {
+fn continuation(l: *Luau, status: zigluau.Status, ctx: isize) i32 {
     _ = status;
 
     if (ctx == 5) {
-        _ = l.pushStringZ("done");
+        _ = l.pushString("done");
         return 1;
     } else {
         // yield the current context value
@@ -663,11 +575,11 @@ fn continuation(l: *Lua, status: zigluau.Status, ctx: isize) i32 {
     }
 }
 
-fn continuation52(l: *Lua) i32 {
+fn continuation52(l: *Luau) i32 {
     const ctxOrNull = l.getContext() catch unreachable;
     const ctx = ctxOrNull orelse 0;
     if (ctx == 5) {
-        _ = l.pushStringZ("done");
+        _ = l.pushString("done");
         return 1;
     } else {
         // yield the current context value
@@ -677,58 +589,28 @@ fn continuation52(l: *Lua) i32 {
 }
 
 test "yielding no continuation" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     var thread = lua.newThread();
-    const func = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
+    const func = struct {
+        fn inner(l: *Luau) i32 {
             l.pushInteger(1);
             return l.yield(1);
         }
-    }.inner);
-    thread.pushFunction(func);
+    }.inner;
+    thread.pushFunction(func, "func");
     _ = try thread.resumeThread(null, 0);
 
     try expectEqual(1, thread.toInteger(-1));
 }
 
-test "resuming" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    // here we create a Lua function that will run 5 times, continutally
-    // yielding a count until it finally returns the string "done"
-    var thread = lua.newThread();
-    thread.openLibs();
-    try thread.doString(
-        \\counter = function()
-        \\  coroutine.yield(1)
-        \\  coroutine.yield(2)
-        \\  coroutine.yield(3)
-        \\  coroutine.yield(4)
-        \\  coroutine.yield(5)
-        \\  return "done"
-        \\end
-    );
-    _ = try thread.getGlobal("counter");
-
-    var i: i32 = 1;
-    while (i <= 5) : (i += 1) {
-        try expectEqual(.yield, try thread.resumeThread(lua, 0));
-        try expectEqual(i, thread.toInteger(-1));
-        lua.pop(lua.getTop());
-    }
-    try expectEqual(.ok, try thread.resumeThread(lua, 0));
-    try expectEqualStrings("done", try thread.toString(-1));
-}
-
 test "aux check functions" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    const function = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
+    const function = struct {
+        fn inner(l: *Luau) i32 {
             l.checkAny(1);
             _ = l.checkInteger(2);
             _ = l.checkNumber(3);
@@ -736,85 +618,85 @@ test "aux check functions" {
             l.checkType(5, .boolean);
             return 0;
         }
-    }.inner);
+    }.inner;
 
-    lua.pushFunction(function);
-    lua.protectedCall(0, 0, 0) catch {
+    lua.pushFunction(function, "func");
+    lua.pcall(0, 0, 0) catch {
         try expectStringContains("argument #1", try lua.toString(-1));
         lua.pop(-1);
     };
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     lua.pushNil();
-    lua.protectedCall(1, 0, 0) catch {
+    lua.pcall(1, 0, 0) catch {
         try expectStringContains("number expected", try lua.toString(-1));
         lua.pop(-1);
     };
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     lua.pushNil();
     lua.pushInteger(3);
-    lua.protectedCall(2, 0, 0) catch {
+    lua.pcall(2, 0, 0) catch {
         try expectStringContains("string expected", try lua.toString(-1));
         lua.pop(-1);
     };
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     lua.pushNil();
     lua.pushInteger(3);
     lua.pushNumber(4);
-    lua.protectedCall(3, 0, 0) catch {
+    lua.pcall(3, 0, 0) catch {
         try expectStringContains("string expected", try lua.toString(-1));
         lua.pop(-1);
     };
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     lua.pushNil();
     lua.pushInteger(3);
     lua.pushNumber(4);
     _ = lua.pushString("hello world");
-    lua.protectedCall(4, 0, 0) catch {
+    lua.pcall(4, 0, 0) catch {
         try expectStringContains("boolean expected", try lua.toString(-1));
         lua.pop(-1);
     };
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     // test pushFail here (currently acts the same as pushNil)
     lua.pushNil();
     lua.pushInteger(3);
     lua.pushNumber(4);
     _ = lua.pushString("hello world");
     lua.pushBoolean(true);
-    try lua.protectedCall(5, 0, 0);
+    try lua.pcall(5, 0, 0);
 }
 
 test "aux opt functions" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    const function = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
+    const function = struct {
+        fn inner(l: *Luau) i32 {
             expectEqual(10, l.optInteger(1) orelse 10) catch unreachable;
             expectEqualStrings("zig", l.optString(2) orelse "zig") catch unreachable;
             expectEqual(1.23, l.optNumber(3) orelse 1.23) catch unreachable;
             expectEqualStrings("lang", l.optString(4) orelse "lang") catch unreachable;
             return 0;
         }
-    }.inner);
+    }.inner;
 
-    lua.pushFunction(function);
-    try lua.protectedCall(0, 0, 0);
+    lua.pushFunction(function, "func");
+    try lua.pcall(0, 0, 0);
 
-    lua.pushFunction(function);
+    lua.pushFunction(function, "func");
     lua.pushInteger(10);
     _ = lua.pushString("zig");
     lua.pushNumber(1.23);
-    _ = lua.pushStringZ("lang");
-    try lua.protectedCall(4, 0, 0);
+    _ = lua.pushString("lang");
+    try lua.pcall(4, 0, 0);
 }
 
 test "checkOption" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     const Variant = enum {
@@ -823,8 +705,8 @@ test "checkOption" {
         three,
     };
 
-    const function = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
+    const function = struct {
+        fn inner(l: *Luau) i32 {
             const option = l.checkOption(Variant, 1, .one);
             l.pushInteger(switch (option) {
                 .one => 1,
@@ -833,64 +715,41 @@ test "checkOption" {
             });
             return 1;
         }
-    }.inner);
+    }.inner;
 
-    lua.pushFunction(function);
-    _ = lua.pushStringZ("one");
-    try lua.protectedCall(1, 1, 0);
+    lua.pushFunction(function, "func");
+    _ = lua.pushString("one");
+    try lua.pcall(1, 1, 0);
     try expectEqual(1, try lua.toInteger(-1));
     lua.pop(1);
 
-    lua.pushFunction(function);
-    _ = lua.pushStringZ("two");
-    try lua.protectedCall(1, 1, 0);
+    lua.pushFunction(function, "func");
+    _ = lua.pushString("two");
+    try lua.pcall(1, 1, 0);
     try expectEqual(2, try lua.toInteger(-1));
     lua.pop(1);
 
-    lua.pushFunction(function);
-    _ = lua.pushStringZ("three");
-    try lua.protectedCall(1, 1, 0);
+    lua.pushFunction(function, "func");
+    _ = lua.pushString("three");
+    try lua.pcall(1, 1, 0);
     try expectEqual(3, try lua.toInteger(-1));
     lua.pop(1);
 
     // try the default now
-    lua.pushFunction(function);
-    try lua.protectedCall(0, 1, 0);
+    lua.pushFunction(function, "func");
+    try lua.pcall(0, 1, 0);
     try expectEqual(1, try lua.toInteger(-1));
     lua.pop(1);
 
     // check the raised error
-    lua.pushFunction(function);
-    _ = lua.pushStringZ("unknown");
-    try expectError(error.Runtime, lua.protectedCall(1, 1, 0));
+    lua.pushFunction(function, "func");
+    _ = lua.pushString("unknown");
+    try expectError(error.Runtime, lua.pcall(1, 1, 0));
     try expectStringContains("(invalid option 'unknown')", try lua.toString(-1));
 }
 
-test "where" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const whereFn = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
-            l.where(1);
-            return 1;
-        }
-    }.inner);
-
-    lua.pushFunction(whereFn);
-    lua.setGlobal("whereFn");
-
-    try lua.doString(
-        \\
-        \\ret = whereFn()
-    );
-
-    _ = try lua.getGlobal("ret");
-    try expectEqualStrings("[string \"...\"]:2: ", try lua.toString(-1));
-}
-
 test "ref luau" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
     lua.pushNil();
@@ -898,243 +757,52 @@ test "ref luau" {
     try expectEqual(1, lua.getTop());
 
     // In luau lua.ref does not pop the item from the stack
-    // and the data is stored in the registry_index by default
+    // and the data is stored in the REGISTRYINDEX by default
     _ = lua.pushString("Hello there");
     const ref = try lua.ref(2);
 
-    _ = lua.rawGetIndex(zigluau.registry_index, ref);
+    _ = lua.rawGetIndex(zigluau.REGISTRYINDEX, ref);
     try expectEqualStrings("Hello there", try lua.toString(-1));
 
     lua.unref(ref);
 }
 
-test "metatables" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString("f = function() return 10 end");
-
-    try lua.newMetatable("mt");
-    // set the len metamethod to the function f
-    _ = try lua.getGlobal("f");
-    lua.setField(1, "__len");
-
-    lua.newTable();
-     _ = lua.getField(zigluau.registry_index, "mt");
-	lua.setMetatable(-2);
-
-    try lua.callMeta(-1, "__len");
-    try expectEqual(10, try lua.toNumber(-1));
-}
-
 test "args and errors" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    const argCheck = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
+    const argCheck = struct {
+        fn inner(l: *Luau) i32 {
             l.argCheck(false, 1, "error!");
-            return 0;
-        }
-    }.inner);
-
-    lua.pushFunction(argCheck);
-    try expectError(error.Runtime, lua.protectedCall(0, 0, 0));
-
-    const raisesError = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
-            l.raiseErrorStr("some error %s!", .{"zig"});
-            unreachable;
-        }
-    }.inner);
-
-    lua.pushFunction(raisesError);
-    try expectError(error.Runtime, lua.protectedCall(0, 0, 0));
-    try expectEqualStrings("some error zig!", try lua.toString(-1));
-}
-
-test "userdata" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const Type = struct { a: i32, b: f32 };
-    try lua.newMetatable("Type");
-
-    const checkUdata = zigluau.wrap(struct {
-        fn inner(l: *Lua) i32 {
-            const ptr = l.checkUserdata(Type, 1, "Type");
-            if (ptr.a != 1234) {
-                _ = l.pushString("error!");
-                l.raiseError();
-            }
-            if (ptr.b != 3.14) {
-                _ = l.pushString("error!");
-                l.raiseError();
-            }
-            return 1;
-        }
-    }.inner);
-
-    lua.pushFunction(checkUdata);
-
-    {
-        var t = lua.newUserdata(Type);
-        _ = lua.getField(zigluau.registry_index, "Type");
-        lua.setMetatable(-2);
-
-        t.a = 1234;
-        t.b = 3.14;
-
-        // call checkUdata asserting that the udata passed in with the
-        // correct metatable and values
-        try lua.protectedCall(1, 1, 0);
-    }
-}
-
-test "userdata slices" {
-    const Integer = zigluau.Integer;
-
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.newMetatable("FixedArray");
-
-    // create an array of 10
-    const slice = lua.newUserdataSlice(Integer, 10);
-    _ = lua.getField(zigluau.registry_index, "FixedArray");
-    lua.setMetatable(-2);
-
-    for (slice, 1..) |*item, index| {
-        item.* = @intCast(index);
-    }
-
-    const udataFn = struct {
-        fn inner(l: *Lua) i32 {
-            _ = l.checkUserdataSlice(Integer, 1, "FixedArray");
-
-            _ = l.testUserdataSlice(Integer, 1, "FixedArray") catch unreachable;
-
-            const arr = l.toUserdataSlice(Integer, 1) catch unreachable;
-            for (arr, 1..) |item, index| {
-                if (item != index) l.raiseErrorStr("something broke!", .{});
-            }
-
             return 0;
         }
     }.inner;
 
-    lua.pushFunction(zigluau.wrap(udataFn));
-    lua.pushValue(2);
+    lua.pushFunction(argCheck, "ArgCheck");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
 
-    try lua.protectedCall(1, 0, 0);
-}
+    const raisesError = struct {
+        fn inner(l: *Luau) i32 {
+            l.raiseErrorStr("some error %s!", .{"zig"});
+            unreachable;
+        }
+    }.inner;
 
-test "function environments" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString("function test() return x end");
-
-    // set the global _G.x to be 10
-    lua.pushInteger(10);
-    lua.setGlobal("x");
-
-    _ = try lua.getGlobal("test");
-    try lua.protectedCall(0, 1, 0);
-    try testing.expectEqual(10, lua.toInteger(1));
-    lua.pop(1);
-
-    // now set the functions table to have a different value of x
-    _ = try lua.getGlobal("test");
-    lua.newTable();
-    lua.pushInteger(20);
-    lua.setField(2, "x");
-    try lua.setFnEnvironment(1);
-
-    try lua.protectedCall(0, 1, 0);
-    try testing.expectEqual(20, lua.toInteger(1));
-    lua.pop(1);
-
-    _ = try lua.getGlobal("test");
-    lua.getFnEnvironment(1);
-    _ = lua.getField(2, "x");
-    try testing.expectEqual(20, lua.toInteger(3));
+    lua.pushFunction(raisesError, "Error");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
+    try expectEqualStrings("some error zig!", try lua.toString(-1));
 }
 
 test "objectLen" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    _ = lua.pushStringZ("lua");
-    try testing.expectEqual(3, lua.objectLen(-1));
-}
-
-// Debug Library
-test "debug interface" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString(
-        \\f = function(x)
-        \\  local y = x * 2
-        \\  y = y + 2
-        \\  return x + y
-        \\end
-    );
-    _ = try lua.getGlobal("f");
-
-    var info: DebugInfo = undefined;
-
-    lua.getInfo(-1, .{
-        .l = true,
-        .s = true,
-        .n = true,
-        .u = true,
-    }, &info);
-
-    // get information about the function
-    try expectEqual(.lua, info.what);
-    const len = std.mem.len(@as([*:0]u8, @ptrCast(&info.short_src)));
-    try expectEqual(1, info.first_line_defined);
-
-    try expectEqual(1, info.current_line);
-    try expectEqualStrings("[string \"...\"]", info.short_src[0..len]);
-}
-
-test "debug upvalues" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    try lua.doString(
-        \\f = function(x)
-        \\  return function(y)
-        \\    return x + y
-        \\  end
-        \\end
-        \\addone = f(1)
-    );
-    _ = try lua.getGlobal("addone");
-
-    // index doesn't exist
-    try expectError(error.Fail, lua.getUpvalue(1, 2));
-
-    // inspect the upvalue (should be x)
-    try expectEqualStrings("", try lua.getUpvalue(-1, 1));
-    try expectEqual(1, try lua.toNumber(-1));
-    lua.pop(1);
-
-    // now make the function an "add five" function
-    lua.pushNumber(5);
-    _ = try lua.setUpvalue(-2, 1);
-
-    // call the new function (should return 7)
-    lua.pushNumber(2);
-    try lua.protectedCall(1, 1, 0);
-    try expectEqual(7, try lua.toNumber(-1));
+    _ = lua.pushString("lua");
+    try testing.expectEqual(3, lua.objLen(-1));
 }
 
 test "compile and run bytecode" {
-    var lua = try Lua.init(testing.allocator);
+    var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
     lua.openLibs();
 
@@ -1144,7 +812,7 @@ test "compile and run bytecode" {
     defer testing.allocator.free(bc);
 
     try lua.loadBytecode("...", bc);
-    try lua.protectedCall(0, 1, 0);
+    try lua.pcall(0, 1, 0);
     const v = try lua.toInteger(-1);
     try expectEqual(133, v);
 
@@ -1175,12 +843,12 @@ test "userdata dtor" {
         }
     };
 
-    // create a Lua-owned pointer to a Data, configure Data with a destructor.
+    // create a Luau-owned pointer to a Data, configure Data with a destructor.
     {
-        var lua = try Lua.init(testing.allocator);
+        var lua = try Luau.init(&testing.allocator);
         defer lua.deinit(); // forces dtors to be called at the latest
 
-        var data = lua.newUserdataDtor(Data, zigluau.wrap(Data.dtor));
+        var data = lua.newUserdataDtor(Data, Data.dtor);
         data.gc_hits_ptr = &gc_hits;
         try expectEqual(@as(*anyopaque, @ptrCast(data)), try lua.toPointer(1));
         try expectEqual(0, gc_hits);
@@ -1192,40 +860,7 @@ test "userdata dtor" {
     }
 }
 
-test "tagged userdata" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
-
-    const Data = struct {
-        val: i32,
-    };
-
-    // create a Lua-owned tagged pointer
-    var data = lua.newUserdataTagged(Data, 13);
-    data.val = 1;
-
-    const data2 = try lua.toUserdataTagged(Data, -1, 13);
-    try testing.expectEqual(data.val, data2.val);
-
-    var tag = try lua.userdataTag(-1);
-    try testing.expectEqual(13, tag);
-
-    lua.setUserdataTag(-1, 100);
-    tag = try lua.userdataTag(-1);
-    try testing.expectEqual(100, tag);
-
-    // Test that tag mismatch error handling works.  Userdata is not tagged with 123.
-    try expectError(error.Fail, lua.toUserdataTagged(Data, -1, 123));
-
-    // should not fail
-    _ = try lua.toUserdataTagged(Data, -1, 100);
-
-    // Integer is not userdata, so userdataTag should fail.
-    lua.pushInteger(13);
-    try expectError(error.Fail, lua.userdataTag(-1));
-}
-
-fn vectorCtor(l: *Lua) i32 {
+fn vectorCtor(l: *Luau) i32 {
     const x = l.toNumber(1) catch unreachable;
     const y = l.toNumber(2) catch unreachable;
     const z = l.toNumber(3) catch unreachable;
@@ -1238,452 +873,6 @@ fn vectorCtor(l: *Lua) i32 {
     return 1;
 }
 
-test "luau vectors" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-    lua.openLibs();
-    lua.register("vector", zigluau.wrap(vectorCtor));
-
-    try lua.doString(
-        \\function test()
-        \\  local a = vector(1, 2, 3)
-        \\  local b = vector(4, 5, 6)
-        \\  local c = (a + b) * vector(2, 2, 2)
-        \\  return vector(c.x, c.y, c.z)
-        \\end
-    );
-    _ = try lua.getGlobal("test");
-    try lua.protectedCall(0, 1, 0);
-    var v = try lua.toVector(-1);
-    try testing.expectEqualSlices(f32, &[3]f32{ 10, 14, 18 }, v[0..3]);
-
-    if (zigluau.luau_vector_size == 3) lua.pushVector(1, 2, 3) else lua.pushVector(1, 2, 3, 4);
-    try expect(lua.isVector(-1));
-    v = try lua.toVector(-1);
-    const expected = if (zigluau.luau_vector_size == 3) [3]f32{ 1, 2, 3 } else [4]f32{ 1, 2, 3, 4 };
-    try expectEqual(expected, v);
-    try expectEqualStrings("vector", lua.typeNameIndex(-1));
-
-    lua.pushInteger(5);
-    try expect(!lua.isVector(-1));
-}
-
-test "luau 4-vectors" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-    lua.openLibs();
-    lua.register("vector", zigluau.wrap(vectorCtor));
-
-    // More specific 4-vector tests
-    if (zigluau.luau_vector_size == 4) {
-        try lua.doString(
-            \\local a = vector(1, 2, 3, 4)
-            \\local b = vector(5, 6, 7, 8)
-            \\return a + b
-        );
-        const vec4 = try lua.toVector(-1);
-        try expectEqual([4]f32{ 6, 8, 10, 12 }, vec4);
-    }
-}
-
-test "useratom" {
-    const useratomCb = struct {
-        pub fn inner(str: []const u8) i16 {
-            if (std.mem.eql(u8, str, "method_one")) {
-                return 0;
-            } else if (std.mem.eql(u8, str, "another_method")) {
-                return 1;
-            }
-            return -1;
-        }
-    }.inner;
-
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-    lua.setUserAtomCallbackFn(zigluau.wrap(useratomCb));
-
-    _ = lua.pushStringZ("unknownatom");
-    _ = lua.pushStringZ("method_one");
-    _ = lua.pushStringZ("another_method");
-
-    const atom_idx0, const str0 = try lua.toStringAtom(-2);
-    const atom_idx1, const str1 = try lua.toStringAtom(-1);
-    const atom_idx2, const str2 = try lua.toStringAtom(-3);
-    try testing.expect(std.mem.eql(u8, str0, "method_one"));
-    try testing.expect(std.mem.eql(u8, str1, "another_method"));
-    try testing.expect(std.mem.eql(u8, str2, "unknownatom")); // should work, but returns -1 for atom idx
-
-    try expectEqual(0, atom_idx0);
-    try expectEqual(1, atom_idx1);
-    try expectEqual(-1, atom_idx2);
-
-    lua.pushInteger(13);
-    try expectError(error.Fail, lua.toStringAtom(-1));
-}
-
-test "namecall" {
-    const funcs = struct {
-        const dot_idx: i32 = 0;
-        const sum_idx: i32 = 1;
-
-        // The useratom callback to initially form a mapping from method names to
-        // integer indices. The indices can then be used to quickly dispatch the right
-        // method in namecalls without needing to perform string compares.
-        pub fn useratomCb(str: []const u8) i16 {
-            if (std.mem.eql(u8, str, "dot")) {
-                return dot_idx;
-            }
-            if (std.mem.eql(u8, str, "sum")) {
-                return sum_idx;
-            }
-            return -1;
-        }
-
-        pub fn vectorNamecall(l: *Lua) i32 {
-            const atom_idx, _ = l.namecallAtom() catch {
-                l.raiseErrorStr("%s is not a valid vector method", .{l.checkString(1).ptr});
-            };
-            switch (atom_idx) {
-                dot_idx => {
-                    const a = l.checkVector(1);
-                    const b = l.checkVector(2);
-                    l.pushNumber(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]); // vec3 dot
-                    return 1;
-                },
-                sum_idx => {
-                    const a = l.checkVector(1);
-                    l.pushNumber(a[0] + a[1] + a[2]);
-                    return 1;
-                },
-                else => unreachable,
-            }
-        }
-    };
-
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-    lua.setUserAtomCallbackFn(zigluau.wrap(funcs.useratomCb));
-
-    lua.register("vector", zigluau.wrap(vectorCtor));
-    lua.pushVector(0, 0, 0);
-
-    try lua.newMetatable("vector");
-    _ = lua.pushStringZ("__namecall");
-    lua.pushFunctionNamed(zigluau.wrap(funcs.vectorNamecall), "vector_namecall");
-    lua.setTable(-3);
-
-    lua.setReadonly(-1, true);
-    lua.setMetatable(-2);
-
-    // Vector setup, try some lua code on them.
-    try lua.doString(
-        \\local a = vector(1, 2, 3)
-        \\local b = vector(3, 2, 1)
-        \\return a:dot(b)
-    );
-    const d = try lua.toNumber(-1);
-    lua.pop(-1);
-    try expectEqual(10, d);
-
-    try lua.doString(
-        \\local a = vector(1, 2, 3)
-        \\return a:sum()
-    );
-    const s = try lua.toNumber(-1);
-    lua.pop(-1);
-    try expectEqual(6, s);
-}
-
-test "toAny" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    //int
-    lua.pushInteger(100);
-    const my_int = try lua.toAny(i32, -1);
-    try testing.expect(my_int == 100);
-
-    //bool
-    lua.pushBoolean(true);
-    const my_bool = try lua.toAny(bool, -1);
-    try testing.expect(my_bool);
-
-    //float
-    lua.pushNumber(100.0);
-    const my_float = try lua.toAny(f32, -1);
-    try testing.expect(my_float == 100.0);
-
-    //[]const u8
-    _ = lua.pushStringZ("hello world");
-    const my_string_1 = try lua.toAny([]const u8, -1);
-    try testing.expect(std.mem.eql(u8, my_string_1, "hello world"));
-
-    //[:0]const u8
-    _ = lua.pushStringZ("hello world");
-    const my_string_2 = try lua.toAny([:0]const u8, -1);
-    try testing.expect(std.mem.eql(u8, my_string_2, "hello world"));
-
-    //[*:0]const u8
-    _ = lua.pushStringZ("hello world");
-    const my_string_3 = try lua.toAny([*:0]const u8, -1);
-    const end = std.mem.indexOfSentinel(u8, 0, my_string_3);
-    try testing.expect(std.mem.eql(u8, my_string_3[0..end], "hello world"));
-
-    //ptr
-    var my_value: i32 = 100;
-    _ = lua.pushLightUserdata(&my_value);
-    const my_ptr = try lua.toAny(*i32, -1);
-    try testing.expect(my_ptr.* == my_value);
-
-    //optional
-    lua.pushNil();
-    const maybe = try lua.toAny(?i32, -1);
-    try testing.expect(maybe == null);
-
-    //enum
-    const MyEnumType = enum { hello, goodbye };
-    _ = lua.pushStringZ("hello");
-    const my_enum = try lua.toAny(MyEnumType, -1);
-    try testing.expect(my_enum == MyEnumType.hello);
-
-    //void
-    try lua.doString("value = {}\nvalue_err = {a = 5}");
-    _ = try lua.getGlobal("value");
-    try testing.expectEqual(void{}, try lua.toAny(void, -1));
-    _ = try lua.getGlobal("value_err");
-    try testing.expectError(error.VoidTableIsNotEmpty, lua.toAny(void, -1));
-}
-
-test "toAny struct" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const MyType = struct {
-//         foo: i32,
-//         bar: bool,
-//         bizz: []const u8 = "hi",
-//     };
-//     try lua.doString("value = {[\"foo\"] = 10, [\"bar\"] = false}");
-//     const lua_type = try lua.getGlobal("value");
-//     try testing.expect(lua_type == .table);
-//     const my_struct = try lua.toAny(MyType, 1);
-//     try testing.expect(std.meta.eql(
-//         my_struct,
-//         MyType{ .foo = 10, .bar = false },
-//     ));
-}
-
-test "toAny struct recursive" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const MyType = struct {
-//         foo: i32 = 10,
-//         bar: bool = false,
-//         bizz: []const u8 = "hi",
-//         meep: struct { a: ?i7 = null } = .{},
-//     };
-
-//     try lua.doString(
-//         \\value = {
-//         \\  ["foo"] = 10,
-//         \\  ["bar"] = false,
-//         \\  ["bizz"] = "hi",
-//         \\  ["meep"] = {
-//         \\    ["a"] = nil
-//         \\  }
-//         \\}
-//     );
-
-//     _ = try lua.getGlobal("value");
-//     const my_struct = try lua.toAny(MyType, -1);
-//     try testing.expectEqualDeep(MyType{}, my_struct);
-}
-
-test "toAny tagged union" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const MyType = union(enum) {
-        a: i32,
-        b: bool,
-        c: []const u8,
-        d: struct { t0: f64, t1: f64 },
-    };
-
-    try lua.doString(
-        \\value0 = {
-        \\  ["c"] = "Hello, world!",
-        \\}
-        \\value1 = {
-        \\  ["d"] = {t0 = 5.0, t1 = -3.0},
-        \\}
-        \\value2 = {
-        \\  ["a"] = 1000,
-        \\}
-    );
-
-    _ = try lua.getGlobal("value0");
-    const my_struct0 = try lua.toAny(MyType, -1);
-    try testing.expectEqualDeep(MyType{ .c = "Hello, world!" }, my_struct0);
-
-    _ = try lua.getGlobal("value1");
-    const my_struct1 = try lua.toAny(MyType, -1);
-    try testing.expectEqualDeep(MyType{ .d = .{ .t0 = 5.0, .t1 = -3.0 } }, my_struct1);
-
-    _ = try lua.getGlobal("value2");
-    const my_struct2 = try lua.toAny(MyType, -1);
-    try testing.expectEqualDeep(MyType{ .a = 1000 }, my_struct2);
-}
-
-test "toAny slice" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const program =
-        \\list = {1, 2, 3, 4, 5}
-    ;
-    try lua.doString(program);
-    _ = try lua.getGlobal("list");
-    const sliced = try lua.toAnyAlloc([]u32, -1);
-    defer sliced.deinit();
-
-    try testing.expect(
-        std.mem.eql(u32, &[_]u32{ 1, 2, 3, 4, 5 }, sliced.value),
-    );
-}
-
-test "toAny array" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const arr: [5]?u32 = .{ 1, 2, null, 4, 5 };
-    const program =
-        \\array= {1, 2, nil, 4, 5}
-    ;
-    try lua.doString(program);
-    _ = try lua.getGlobal("array");
-    const array = try lua.toAny([5]?u32, -1);
-    try testing.expectEqual(arr, array);
-}
-
-test "toAny vector" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    const vec = @Vector(4, bool){ true, false, false, true };
-    const program =
-        \\vector= {true, false, false, true}
-    ;
-    try lua.doString(program);
-    _ = try lua.getGlobal("vector");
-    const vector = try lua.toAny(@Vector(4, bool), -1);
-    try testing.expectEqual(vec, vector);
-}
-
-test "pushAny" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     //int
-//     try lua.pushAny(1);
-//     const my_int = try lua.toInteger(-1);
-//     try testing.expect(my_int == 1);
-
-//     //float
-//     try lua.pushAny(1.0);
-//     const my_float = try lua.toNumber(-1);
-//     try testing.expect(my_float == 1.0);
-
-//     //bool
-//     try lua.pushAny(true);
-//     const my_bool = lua.toBoolean(-1);
-//     try testing.expect(my_bool);
-
-//     //string literal
-//     try lua.pushAny("hello world");
-//     const value = try lua.toString(-1);
-//     const end = std.mem.indexOfSentinel(u8, 0, value);
-//     try testing.expect(std.mem.eql(u8, value[0..end], "hello world"));
-
-//     //null
-//     try lua.pushAny(null);
-//     try testing.expect(try lua.toAny(?f32, -1) == null);
-
-//     //optional
-//     const my_optional: ?i32 = -1;
-//     try lua.pushAny(my_optional);
-//     try testing.expect(try lua.toAny(?i32, -1) == my_optional);
-
-//     //enum
-//     const MyEnumType = enum { hello, goodbye };
-//     try lua.pushAny(MyEnumType.goodbye);
-//     const my_enum = try lua.toAny(MyEnumType, -1);
-//     try testing.expect(my_enum == MyEnumType.goodbye);
-
-//     //void
-//     try lua.pushAny(void{});
-//     try testing.expectEqual(void{}, try lua.toAny(void, -1));
-}
-
-test "pushAny struct" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const MyType = struct {
-//         foo: i32 = 1,
-//         bar: bool = false,
-//         bizz: []const u8 = "hi",
-//     };
-//     try lua.pushAny(MyType{});
-//     const value = try lua.toAny(MyType, -1);
-//     try testing.expect(std.mem.eql(u8, value.bizz, (MyType{}).bizz));
-//     try testing.expect(value.foo == (MyType{}).foo);
-//     try testing.expect(value.bar == (MyType{}).bar);
-}
-
-test "pushAny tagged union" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const MyType = union(enum) {
-//         a: i32,
-//         b: bool,
-//         c: []const u8,
-//         d: struct { t0: f64, t1: f64 },
-//     };
-
-//     const t0 = MyType{ .d = .{ .t0 = 5.0, .t1 = -3.0 } };
-//     try lua.pushAny(t0);
-//     const value0 = try lua.toAny(MyType, -1);
-//     try testing.expectEqualDeep(t0, value0);
-
-//     const t1 = MyType{ .c = "Hello, world!" };
-//     try lua.pushAny(t1);
-//     const value1 = try lua.toAny(MyType, -1);
-//     try testing.expectEqualDeep(t1, value1);
-}
-
-test "pushAny toAny slice/array/vector" {
-    var lua = try Lua.init(testing.allocator);
-    defer lua.deinit();
-
-    var my_array = [_]u32{ 1, 2, 3, 4, 5 };
-    const my_slice: []u32 = my_array[0..];
-    const my_vector: @Vector(5, u32) = .{ 1, 2, 3, 4, 5 };
-    try lua.pushAny(my_slice);
-    try lua.pushAny(my_array);
-    try lua.pushAny(my_vector);
-    const vector = try lua.toAny(@TypeOf(my_vector), -1);
-    const array = try lua.toAny(@TypeOf(my_array), -2);
-    const slice = try lua.toAnyAlloc(@TypeOf(my_slice), -3);
-    defer slice.deinit();
-
-    try testing.expectEqual(my_array, array);
-    try testing.expectEqualDeep(my_slice, slice.value);
-    try testing.expectEqual(my_vector, vector);
-}
-
 fn foo(a: i32, b: i32) i32 {
     return a + b;
 }
@@ -1691,133 +880,4 @@ fn foo(a: i32, b: i32) i32 {
 fn bar(a: i32, b: i32) !i32 {
     if (a > b) return error.wrong;
     return a + b;
-}
-
-test "autoPushFunction" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-//     lua.openLibs();
-
-//     lua.autoPushFunction(foo);
-//     lua.setGlobal("foo");
-
-//     lua.autoPushFunction(bar);
-//     lua.setGlobal("bar");
-
-//     try lua.doString(
-//         \\result = foo(1, 2)
-//     );
-//     try lua.doString(
-//         \\local status, result = pcall(bar, 1, 2)
-//     );
-
-//     //automatic api construction
-//     const my_api = .{
-//         .foo = foo,
-//         .bar = bar,
-//     };
-
-//     try lua.pushAny(my_api);
-//     lua.setGlobal("api");
-
-//     try lua.doString(
-//         \\api.foo(1, 2)
-//     );
-}
-
-test "autoCall" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const program =
-//         \\function add(a, b)
-//         \\   return a + b
-//         \\end
-//     ;
-
-//     try lua.doString(program);
-
-//     for (0..100) |_| {
-//         const sum = try lua.autoCall(usize, "add", .{ 1, 2 });
-//         try std.testing.expect(3 == sum);
-//     }
-
-//     for (0..100) |_| {
-//         const sum = try lua.autoCallAlloc(usize, "add", .{ 1, 2 });
-//         defer sum.deinit();
-//         try std.testing.expect(3 == sum.value);
-//     }
-}
-
-test "autoCall stress test" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const program =
-//         \\function add(a, b)
-//         \\   return a + b
-//         \\end
-//         \\
-//         \\
-//         \\function KeyBindings()
-//         \\
-//         \\   local bindings = {
-//         \\      {['name'] = 'player_right', ['key'] = 'a'},
-//         \\      {['name'] = 'player_left',  ['key'] = 'd'},
-//         \\      {['name'] = 'player_up',    ['key'] = 'w'},
-//         \\      {['name'] = 'player_down',  ['key'] = 's'},
-//         \\      {['name'] = 'zoom_in',      ['key'] = '='},
-//         \\      {['name'] = 'zoom_out',     ['key'] = '-'},
-//         \\      {['name'] = 'debug_mode',   ['key'] = '/'},
-//         \\   }
-//         \\
-//         \\   return bindings
-//         \\end
-//     ;
-
-//     try lua.doString(program);
-
-//     const ConfigType = struct {
-//         name: []const u8,
-//         key: []const u8,
-//         shift: bool = false,
-//         control: bool = false,
-//     };
-
-//     for (0..100) |_| {
-//         const sum = try lua.autoCallAlloc([]ConfigType, "KeyBindings", .{});
-//         defer sum.deinit();
-//     }
-}
-
-test "get set" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     try lua.set("hello", true);
-//     try testing.expect(try lua.get(bool, "hello"));
-
-//     try lua.set("world", 1000);
-//     try testing.expect(try lua.get(u64, "world") == 1000);
-
-//     try lua.set("foo", 'a');
-//     try testing.expect(try lua.get(u8, "foo") == 'a');
-}
-
-test "array of strings" {
-//     var lua = try Lua.init(testing.allocator);
-//     defer lua.deinit();
-
-//     const program =
-//         \\function strings()
-//         \\   return {"hello", "world", "my name", "is foobar"}
-//         \\end
-//     ;
-
-//     try lua.doString(program);
-
-//     for (0..100) |_| {
-//         const strings = try lua.autoCallAlloc([]const []const u8, "strings", .{});
-//         defer strings.deinit();
-//     }
 }

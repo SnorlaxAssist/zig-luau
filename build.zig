@@ -47,7 +47,7 @@ pub fn build(b: *Build) !void {
     tests.root_module.addImport("zigluau", zigluau);
 
     const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run ziglua tests");
+    const test_step = b.step("test", "Run zigluau tests");
     test_step.dependOn(&run_tests.step);
 
     // Examples
