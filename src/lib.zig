@@ -140,7 +140,8 @@ pub const Libs = packed struct {
     math: bool = false,
     io: bool = false,
     os: bool = false,
-    debug: bool = false,
+    bit32: bool = false,
+    buffer: bool = false,
 };
 
 /// The type of the opaque structure that points to a thread and the state of a Luau interpreter
@@ -1212,6 +1213,9 @@ pub const Luau = struct {
         if (libs.math) luau.requireF(c.LUA_MATHLIBNAME, c.luaopen_math);
         if (libs.os) luau.requireF(c.LUA_OSLIBNAME, c.luaopen_os);
         if (libs.debug) luau.requireF(c.LUA_DBLIBNAME, c.luaopen_debug);
+        if (libs.bit32) luau.requireF(c.LUA_BITLIBNAME, c.luaopen_bit32);
+        if (libs.utf8) luau.requireF(c.LUA_UTF8LIBNAME, c.luaopen_utf8);
+        if (libs.buffer) luau.requireF(c.LUA_BUFFERLIBNAME, c.luaopen_buffer);
     }
 
     fn requireF(luau: *Luau, name: [:0]const u8, func: ZigFn) void {
@@ -1254,9 +1258,27 @@ pub const Luau = struct {
     pub fn openDebug(luau: *Luau) void {
         _ = c.luaopen_debug(@ptrCast(luau));
     }
+
+    /// Open the coroutine standard library
     pub fn openCoroutine(luau: *Luau) void {
         _ = c.luaopen_coroutine(@ptrCast(luau));
     }
+
+    /// Open the utf8 standard library
+    pub fn openUtf8(luau: *Luau) void {
+        _ = c.luaopen_utf8(@ptrCast(luau));
+    }
+
+    /// Open the bit32 standard library
+    pub fn openBit32(luau: *Luau) void {
+        _ = c.luaopen_bit32(@ptrCast(luau));
+    }
+
+    /// Open the buffer standard library
+    pub fn openBuffer(luau: *Luau) void {
+        _ = c.luaopen_buffer(@ptrCast(luau));
+    }
+
 };
 
 /// A string buffer allowing for Zig code to build Luau strings piecemeal
