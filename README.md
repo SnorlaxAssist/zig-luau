@@ -1,14 +1,13 @@
 # Zigluau
-[![shield showing current tests status](https://github.com/natecraddock/ziglua/actions/workflows/tests.yml/badge.svg)](https://github.com/natecraddock/ziglua/actions/workflows/tests.yml)
-[![Discord](https://img.shields.io/discord/1196908820140671077?style=flat&logo=discord)](https://discord.com/invite/XpZqDFvAtK)
+[![shield showing current tests status](https://github.com/SnorlaxAssist/zigluau/actions/workflows/tests.yml/badge.svg)](https://github.com/SnorlaxAssist/zigluau/actions/workflows/tests.yml)
 
-A Zig package that provides a complete and lightweight wrapper around the [Lua C API](https://www.lua.org/manual/5.4/manual.html#4). Zigluau currently supports the latest releases of Lua 5.1, 5.2, 5.3, 5.4, and [Luau](https://luau-lang.org) and targets Zig master. Tagged versions of Zigluau are made for stable Zig releases.
+A Zig package that provides a complete and lightweight wrapper around the [Luau C API](https://www.lua.org/manual/5.4/manual.html#4). Zigluau currently supports [Luau](https://luau-lang.org) and targets Zig. Tagged versions of Zigluau are made for stable Zig releases.
 
 Zigluau can be used in two ways, either
 * **embedded** to statically embed the Lua VM in a Zig program,
 * or as a shared **module** to create Lua libraries that can be loaded at runtime in other Lua-based software.
 
-In both cases, Ziglua will compile Lua from source and link against your Zig code making it easy to create software that integrates with Lua without requiring any system Lua libraries.
+In both cases, Zigluau will compile Lua from source and link against your Zig code making it easy to create software that integrates with Lua without requiring any system Lua libraries.
 
 ## Documentation
 Docs are a work in progress and are automatically generated for each push to main. Most functions and public declarations are documented:
@@ -30,7 +29,7 @@ In a nutshell, Zigluau is a simple wrapper around the C API you would get by usi
 * Better types in many cases (e.g. `bool` instead of `int`)
 * Comptime convenience functions to make binding creation easier
 
-Nearly every function in the C API is exposed in Zigluau. Additional convenience functions like `toAny` and `pushAny` use comptime reflection to make the API easier to use.
+Nearly every function in the C API is exposed in Zigluau.
 
 ## Integrating Zigluau in your project
 
@@ -59,18 +58,12 @@ pub fn build(b: *std.Build) void {
 
 This will compile the Lua C sources and link with your project.
 
-There are currently two additional options that can be passed to `b.dependency()`:
-
-* `.lang`: Set the Lua language to build and embed. Defaults to `.lua54`. Possible values are `.lua51`, `.lua52`, `.lua53`, `.lua54`, and `luau`.
-* `.shared`: Defaults to `false` for embedding in a Zig program. Set to `true` to dynamically link the Lua source code (useful for creating shared modules).
-
-For example, here is a `b.dependency()` call that and links against a shared Lua 5.2 library:
+For example, here is a `b.dependency()` call that and links against a Luau library:
 
 ```zig
 const zigluau = b.dependency("zigluau", .{
     .target = target,
     .optimize = optimize,
-    .shared = true,
 });
 ``````
 
@@ -101,6 +94,6 @@ pub fn main() anyerror!void {
 ## Contributing
 Please make suggestions, report bugs, and create pull requests. Anyone is welcome to contribute!
 
-I only use a subset of the Lua API through Zigluau, so if there are parts that aren't easy to use or understand, please fix it yourself or let me know!
+I only use a subset of the Luau API through Zigluau, so if there are parts that aren't easy to use or understand, please fix it yourself or let me know!
 
-Thank you to the [Lua](https://lua.org) team for creating such a great language!
+Thank you to the [Luau](https://luau-lang.org/) team for creating such a great language!
