@@ -246,6 +246,14 @@ pub const CodeGen = struct {
     pub fn Supported() bool {
         return c.luau_codegen_supported() == 1;
     }
+
+    pub fn Create(luau : *Luau) void {
+        c.luau_codegen_create(zConverter.LuauToState(luau));
+    }
+
+    pub fn Compile(luau : *Luau, idx : i32) void {
+        c.luau_codegen_compile(zConverter.LuauToState(luau), @intCast(idx));
+    }
 };
 
 pub const zNative = c;
@@ -1103,6 +1111,10 @@ pub const Luau = struct {
         return val_type;
     }
 
+    pub fn getMainThread(luau: *Luau) *Luau {
+        return @ptrCast(c.lua_mainthread(@ptrCast(luau)));
+    }
+
     /// Pushes onto the stack the metatable associated with the name `type_name` in the registry
     /// or nil if there is no metatable associated with that name. Returns the type of the pushed value
     pub fn getMetatableRegistry(luau: *Luau, table_name: [:0]const u8) LuaType {
@@ -1294,6 +1306,14 @@ pub const Luau = struct {
     /// Open the buffer standard library
     pub fn openBuffer(luau: *Luau) void {
         _ = c.luaopen_buffer(@ptrCast(luau));
+    }
+
+    pub fn sandbox(luau: *Luau) void {
+        c.luaL_sandbox(@ptrCast(luau));
+    }
+
+    pub fn sandboxThread(luau: *Luau) void {
+        c.luaL_sandboxthread(@ptrCast(luau));
     }
 
 };
