@@ -248,6 +248,16 @@ pub const CodeGen = struct {
     }
 };
 
+pub const zNative = c;
+pub const zConverter = struct {
+    pub fn LuauToState(luau : *Luau) *LuaState {
+        return @ptrCast(luau);
+    }
+    pub fn StateToLuau(state : *LuaState) *Luau {
+        return @ptrCast(state);
+    }
+};
+
 /// A Zig wrapper around the Luau C API
 /// Represents a Luau state or thread and contains the entire state of the Luau interpreter
 pub const Luau = struct {
@@ -456,7 +466,7 @@ pub const Luau = struct {
 
     /// Pushes onto the stack the value of the global name
     pub fn getGlobal(luau: *Luau, name: [:0]const u8) !LuaType {
-        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(@as(*LuaState, @ptrCast(luau)), name.ptr));
+        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(zConverter.LuauToState(luau), name.ptr));
         if (lua_type == .nil) return error.Fail;
         return lua_type;
     }
@@ -486,7 +496,7 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a boolean
     pub fn isBoolean(luau: *Luau, index: i32) bool {
-        return c.lua_isboolean(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isboolean(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a CFn
@@ -496,27 +506,27 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a function (C or Luau)
     pub fn isFunction(luau: *Luau, index: i32) bool {
-        return c.lua_isfunction(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isfunction(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a light userdata
     pub fn isLightUserdata(luau: *Luau, index: i32) bool {
-        return c.lua_islightuserdata(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_islightuserdata(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is nil
     pub fn isNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnil(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isnil(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the given index is not valid
     pub fn isNone(luau: *Luau, index: i32) bool {
-        return c.lua_isnone(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isnone(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the given index is not valid or if the value at the index is nil
     pub fn isNoneOrNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnoneornil(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isnoneornil(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a number
@@ -531,12 +541,12 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a table
     pub fn isTable(luau: *Luau, index: i32) bool {
-        return c.lua_istable(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_istable(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a thread
     pub fn isThread(luau: *Luau, index: i32) bool {
-        return c.lua_isthread(@as(*LuaState, @ptrCast(luau)), index);
+        return c.lua_isthread(zConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a userdata (full or light)
@@ -562,7 +572,7 @@ pub const Luau = struct {
     /// Creates a new empty table and pushes it onto the stack
     /// Equivalent to createTable(0, 0)
     pub fn newTable(luau: *Luau) void {
-        c.lua_newtable(@as(*LuaState, @ptrCast(luau)));
+        c.lua_newtable(zConverter.LuauToState(luau));
     }
 
     /// Creates a new thread, pushes it on the stack, and returns a Luau state that represents the new thread
@@ -576,7 +586,7 @@ pub const Luau = struct {
     pub fn newUserdata(luau: *Luau, comptime T: type) *T {
         // safe to .? because this function throws a Luau error on out of memory
         // so the returned pointer should never be null
-        const ptr = c.lua_newuserdata(@as(*LuaState, @ptrCast(luau)), @sizeOf(T)).?;
+        const ptr = c.lua_newuserdata(zConverter.LuauToState(luau), @sizeOf(T)).?;
         return opaqueCast(T, ptr);
     }
 
@@ -584,7 +594,7 @@ pub const Luau = struct {
     /// Returns a slice to the Luau-owned data.
     pub fn newUserdataSlice(luau: *Luau, comptime T: type, size: usize) []T {
         // safe to .? because this function throws a Luau error on out of memory
-        const ptr = c.lua_newuserdata(@as(*LuaState, @ptrCast(luau)), @sizeOf(T) * size).?;
+        const ptr = c.lua_newuserdata(zConverter.LuauToState(luau), @sizeOf(T) * size).?;
         return @as([*]T, @ptrCast(@alignCast(ptr)))[0..size];
     }
 
@@ -639,7 +649,7 @@ pub const Luau = struct {
 
     /// Push a formatted string onto the stack and return a pointer to the string
     pub fn pushFString(luau: *Luau, fmt: [:0]const u8, args: anytype) [*:0]const u8 {
-        return @call(.auto, c.lua_pushfstringL, .{ @as(*LuaState, @ptrCast(luau)), fmt.ptr } ++ args);
+        return @call(.auto, c.lua_pushfstringL, .{ zConverter.LuauToState(luau), fmt.ptr } ++ args);
     }
 
     /// Pushes an integer with value `n` onto the stack
@@ -649,7 +659,7 @@ pub const Luau = struct {
 
     /// Pushes a light userdata onto the stack
     pub fn pushLightUserdata(luau: *Luau, ptr: *anyopaque) void {
-        c.lua_pushlightuserdata(@as(*LuaState, @ptrCast(luau)), ptr);
+        c.lua_pushlightuserdata(zConverter.LuauToState(luau), ptr);
     }
 
     /// Pushes the bytes onto the stack
@@ -759,7 +769,7 @@ pub const Luau = struct {
 
     /// Pops a value from the stack and sets it as the new value of global `name`
     pub fn setGlobal(luau: *Luau, name: [:0]const u8) void {
-        c.lua_setglobal(@as(*LuaState, @ptrCast(luau)), name.ptr);
+        c.lua_setglobal(zConverter.LuauToState(luau), name.ptr);
     }
 
     /// Pops a table or nil from the stack and sets that value as the new metatable for the
@@ -981,7 +991,7 @@ pub const Luau = struct {
 
     /// Raises an error reporting a problem with argument `arg` of the C function that called it
     pub fn argError(luau: *Luau, arg: i32, extra_msg: [*:0]const u8) noreturn {
-        _ = c.luaL_argerror(@as(*LuaState, @ptrCast(luau)), arg, extra_msg);
+        _ = c.luaL_argerror(zConverter.LuauToState(luau), arg, extra_msg);
         unreachable;
     }
 
@@ -1077,7 +1087,7 @@ pub const Luau = struct {
 
     /// Raises an error
     pub fn raiseErrorStr(luau: *Luau, fmt: [:0]const u8, args: anytype) noreturn {
-        _ = @call(.auto, c.luaL_errorL, .{ @as(*LuaState, @ptrCast(luau)), fmt.ptr } ++ args);
+        _ = @call(.auto, c.luaL_errorL, .{ zConverter.LuauToState(luau), fmt.ptr } ++ args);
         unreachable;
     }
 
@@ -1159,16 +1169,23 @@ pub const Luau = struct {
         return if (ret == ref_nil) error.Fail else ret;
     }
 
+    pub fn findTable(luau: *Luau, index: i32, name: [:0]const u8, sizehint: usize) ?[:0]const u8 {
+        if (c.luaL_findtable(@ptrCast(luau), index, name, @intCast(sizehint))) |e| {
+            return std.mem.span(e);
+        }
+        return null;
+    }
+
     /// Opens a library
     pub fn registerFns(luau: *Luau, libname: ?[:0]const u8, funcs: []const FnReg) void {
         // translated from the implementation of luaI_openlib so we can use a slice of
         // FnReg without requiring a sentinel end value
         if (libname) |name| {
-            _ = c.luaL_findtable(@ptrCast(luau), REGISTRYINDEX, "_LOADED", 1);
+            _ = luau.findTable(REGISTRYINDEX, "_LOADED", 1);
             _ = luau.getField(-1, name);
             if (!luau.isTable(-1)) {
                 luau.pop(1);
-                if (c.luaL_findtable(@ptrCast(luau), GLOBALSINDEX, name, @intCast(funcs.len))) |_| {
+                if (luau.findTable(GLOBALSINDEX, name, funcs.len)) |_| {
                     luau.raiseErrorStr("name conflict for module '%s'", .{name.ptr});
                 }
                 luau.pushValue(-1);
