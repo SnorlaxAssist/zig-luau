@@ -3,21 +3,13 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LIB_LUAU = "./lib/Luau/";
+const LIB_LUAU = "";
 
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
     b.top_level_steps = .{};
 
-    const git_install_modules = b.step("submodules", "Run Git Submodule Update");
-
-    const submodules = b.addSystemCommand(&.{"git"});
-    submodules.addArg("submodule");
-    submodules.addArg("update");
-    submodules.addArg("--init");
-    submodules.addArg("--recursive");
-
-    git_install_modules.dependOn(&submodules.step);
+    const luau_dep = b.lazyDependency("luau", .{}) orelse unreachable;
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -37,14 +29,13 @@ pub fn build(b: *Build) !void {
     const vector_size: usize = if (use_4_vector) 4 else 3;
     zigluau.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
 
-    const lib = try buildLuau(b, target, optimize, use_4_vector);
-    lib.step.dependOn(git_install_modules);
+    const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
     b.installArtifact(lib);
 
-    zigluau.addIncludePath(b.path("lib/Luau/Common/include"));
-    zigluau.addIncludePath(b.path("lib/Luau/Compiler/include"));
-    zigluau.addIncludePath(b.path("lib/Luau/Ast/include"));
-    zigluau.addIncludePath(b.path("lib/Luau/VM/include"));
+    zigluau.addIncludePath(luau_dep.path("Common/include"));
+    zigluau.addIncludePath(luau_dep.path("Compiler/include"));
+    zigluau.addIncludePath(luau_dep.path("Ast/include"));
+    zigluau.addIncludePath(luau_dep.path("VM/include"));
 
     zigluau.linkLibrary(lib);
 
@@ -106,7 +97,7 @@ pub fn build(b: *Build) !void {
 }
 
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
-fn buildLuau(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, use_4_vector: bool) !*Step.Compile {
+fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency : *Build.Dependency, optimize: std.builtin.OptimizeMode, use_4_vector: bool) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
         .target = target,
@@ -115,7 +106,7 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.Opti
     });
 
     for (LUAU_HEADER_DIRS) |dir| {
-        lib.addIncludePath(b.path(dir));
+        lib.addIncludePath(dependency.path(dir));
     }
 
     const FLAGS = [_][]const u8{
@@ -127,123 +118,122 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, optimize: std.builtin.Opti
     };
 
     lib.linkLibCpp();
-    lib.addCSourceFiles(.{
-        .files = &LUAU_SOURCE_FILES,
-        .flags = &FLAGS,
-    });
+    for (LUAU_SOURCE_FILES) |file| {
+        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    }
     lib.addCSourceFile(.{ .file = .{ .path = "src/luau.cpp" }, .flags = &FLAGS });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
-    lib.installHeader(b.path(LIB_LUAU ++ "VM/include/lua.h"), "lua.h");
-    lib.installHeader(b.path(LIB_LUAU ++ "VM/include/lualib.h"), "lualib.h");
-    lib.installHeader(b.path(LIB_LUAU ++ "VM/include/luaconf.h"), "luaconf.h");
-    lib.installHeader(b.path(LIB_LUAU ++ "CodeGen/include/luacodegen.h"), "luacodegen.h");
+    lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
+    lib.installHeader(dependency.path("VM/include/lualib.h"), "lualib.h");
+    lib.installHeader(dependency.path("VM/include/luaconf.h"), "luaconf.h");
+    lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
 
     return lib;
 }
 
 const LUAU_HEADER_DIRS = [_][]const u8{
-    LIB_LUAU ++ "Common/include/",
-    LIB_LUAU ++ "Ast/include/",
-    LIB_LUAU ++ "Compiler/include/",
-    LIB_LUAU ++ "Compiler/src/",
-    LIB_LUAU ++ "CodeGen/include/",
-    LIB_LUAU ++ "CodeGen/src/",
-    LIB_LUAU ++ "VM/include/",
-    LIB_LUAU ++ "VM/src/",
+    "Common/include/",
+    "Ast/include/",
+    "Compiler/include/",
+    "Compiler/src/",
+    "CodeGen/include/",
+    "CodeGen/src/",
+    "VM/include/",
+    "VM/src/",
 };
 
 const LUAU_SOURCE_FILES = [_][]const u8{
     // Compiler
-    LIB_LUAU ++ "Compiler/src/BuiltinFolding.cpp",
-    LIB_LUAU ++ "Compiler/src/Builtins.cpp",
-    LIB_LUAU ++ "Compiler/src/BytecodeBuilder.cpp",
-    LIB_LUAU ++ "Compiler/src/Compiler.cpp",
-    LIB_LUAU ++ "Compiler/src/ConstantFolding.cpp",
-    LIB_LUAU ++ "Compiler/src/CostModel.cpp",
-    LIB_LUAU ++ "Compiler/src/TableShape.cpp",
-    LIB_LUAU ++ "Compiler/src/Types.cpp",
-    LIB_LUAU ++ "Compiler/src/ValueTracking.cpp",
-    LIB_LUAU ++ "Compiler/src/lcode.cpp",
+    "Compiler/src/BuiltinFolding.cpp",
+    "Compiler/src/Builtins.cpp",
+    "Compiler/src/BytecodeBuilder.cpp",
+    "Compiler/src/Compiler.cpp",
+    "Compiler/src/ConstantFolding.cpp",
+    "Compiler/src/CostModel.cpp",
+    "Compiler/src/TableShape.cpp",
+    "Compiler/src/Types.cpp",
+    "Compiler/src/ValueTracking.cpp",
+    "Compiler/src/lcode.cpp",
 
     // CodeGen
-    LIB_LUAU ++ "CodeGen/src/AssemblyBuilderA64.cpp",
-    LIB_LUAU ++ "CodeGen/src/AssemblyBuilderX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeAllocator.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeBlockUnwind.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeGen.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeGenAssembly.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeGenContext.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeGenUtils.cpp",
-    LIB_LUAU ++ "CodeGen/src/CodeGenA64.cpp",
-    LIB_LUAU ++  "CodeGen/src/CodeGenX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/EmitBuiltinsX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/EmitCommonX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/EmitInstructionX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrAnalysis.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrBuilder.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrCallWrapperX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrDump.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrLoweringA64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrLoweringX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrRegAllocA64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrRegAllocX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrTranslateBuiltins.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrTranslation.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrUtils.cpp",
-    LIB_LUAU ++ "CodeGen/src/IrValueLocationTracking.cpp",
-    LIB_LUAU ++ "CodeGen/src/lcodegen.cpp",
-    LIB_LUAU ++ "CodeGen/src/NativeProtoExecData.cpp",
-    LIB_LUAU ++ "CodeGen/src/NativeState.cpp",
-    LIB_LUAU ++ "CodeGen/src/OptimizeConstProp.cpp",
-    LIB_LUAU ++ "CodeGen/src/OptimizeDeadStore.cpp",
-    LIB_LUAU ++ "CodeGen/src/OptimizeFinalX64.cpp",
-    LIB_LUAU ++ "CodeGen/src/UnwindBuilderDwarf2.cpp",
-    LIB_LUAU ++ "CodeGen/src/UnwindBuilderWin.cpp",
-    LIB_LUAU ++ "CodeGen/src/BytecodeAnalysis.cpp",
-    LIB_LUAU ++ "CodeGen/src/BytecodeSummary.cpp",
-    LIB_LUAU ++ "CodeGen/src/SharedCodeAllocator.cpp",
+    "CodeGen/src/AssemblyBuilderA64.cpp",
+    "CodeGen/src/AssemblyBuilderX64.cpp",
+    "CodeGen/src/CodeAllocator.cpp",
+    "CodeGen/src/CodeBlockUnwind.cpp",
+    "CodeGen/src/CodeGen.cpp",
+    "CodeGen/src/CodeGenAssembly.cpp",
+    "CodeGen/src/CodeGenContext.cpp",
+    "CodeGen/src/CodeGenUtils.cpp",
+    "CodeGen/src/CodeGenA64.cpp",
+    "CodeGen/src/CodeGenX64.cpp",
+    "CodeGen/src/EmitBuiltinsX64.cpp",
+    "CodeGen/src/EmitCommonX64.cpp",
+    "CodeGen/src/EmitInstructionX64.cpp",
+    "CodeGen/src/IrAnalysis.cpp",
+    "CodeGen/src/IrBuilder.cpp",
+    "CodeGen/src/IrCallWrapperX64.cpp",
+    "CodeGen/src/IrDump.cpp",
+    "CodeGen/src/IrLoweringA64.cpp",
+    "CodeGen/src/IrLoweringX64.cpp",
+    "CodeGen/src/IrRegAllocA64.cpp",
+    "CodeGen/src/IrRegAllocX64.cpp",
+    "CodeGen/src/IrTranslateBuiltins.cpp",
+    "CodeGen/src/IrTranslation.cpp",
+    "CodeGen/src/IrUtils.cpp",
+    "CodeGen/src/IrValueLocationTracking.cpp",
+    "CodeGen/src/lcodegen.cpp",
+    "CodeGen/src/NativeProtoExecData.cpp",
+    "CodeGen/src/NativeState.cpp",
+    "CodeGen/src/OptimizeConstProp.cpp",
+    "CodeGen/src/OptimizeDeadStore.cpp",
+    "CodeGen/src/OptimizeFinalX64.cpp",
+    "CodeGen/src/UnwindBuilderDwarf2.cpp",
+    "CodeGen/src/UnwindBuilderWin.cpp",
+    "CodeGen/src/BytecodeAnalysis.cpp",
+    "CodeGen/src/BytecodeSummary.cpp",
+    "CodeGen/src/SharedCodeAllocator.cpp",
 
     // VM
-    LIB_LUAU ++ "VM/src/lapi.cpp",
-    LIB_LUAU ++ "VM/src/laux.cpp",
-    LIB_LUAU ++ "VM/src/lbaselib.cpp",
-    LIB_LUAU ++ "VM/src/lbitlib.cpp",
-    LIB_LUAU ++ "VM/src/lbuffer.cpp",
-    LIB_LUAU ++ "VM/src/lbuflib.cpp",
-    LIB_LUAU ++ "VM/src/lbuiltins.cpp",
-    LIB_LUAU ++ "VM/src/lcorolib.cpp",
-    LIB_LUAU ++ "VM/src/ldblib.cpp",
-    LIB_LUAU ++ "VM/src/ldebug.cpp",
-    LIB_LUAU ++ "VM/src/ldo.cpp",
-    LIB_LUAU ++ "VM/src/lfunc.cpp",
-    LIB_LUAU ++ "VM/src/lgc.cpp",
-    LIB_LUAU ++ "VM/src/lgcdebug.cpp",
-    LIB_LUAU ++ "VM/src/linit.cpp",
-    LIB_LUAU ++ "VM/src/lmathlib.cpp",
-    LIB_LUAU ++ "VM/src/lmem.cpp",
-    LIB_LUAU ++ "VM/src/lnumprint.cpp",
-    LIB_LUAU ++ "VM/src/lobject.cpp",
-    LIB_LUAU ++ "VM/src/loslib.cpp",
-    LIB_LUAU ++ "VM/src/lperf.cpp",
-    LIB_LUAU ++ "VM/src/lstate.cpp",
-    LIB_LUAU ++ "VM/src/lstring.cpp",
-    LIB_LUAU ++ "VM/src/lstrlib.cpp",
-    LIB_LUAU ++ "VM/src/ltable.cpp",
-    LIB_LUAU ++ "VM/src/ltablib.cpp",
-    LIB_LUAU ++ "VM/src/ltm.cpp",
-    LIB_LUAU ++ "VM/src/ludata.cpp",
-    LIB_LUAU ++ "VM/src/lutf8lib.cpp",
-    LIB_LUAU ++ "VM/src/lvmexecute.cpp",
-    LIB_LUAU ++ "VM/src/lvmload.cpp",
-    LIB_LUAU ++ "VM/src/lvmutils.cpp",
+    "VM/src/lapi.cpp",
+    "VM/src/laux.cpp",
+    "VM/src/lbaselib.cpp",
+    "VM/src/lbitlib.cpp",
+    "VM/src/lbuffer.cpp",
+    "VM/src/lbuflib.cpp",
+    "VM/src/lbuiltins.cpp",
+    "VM/src/lcorolib.cpp",
+    "VM/src/ldblib.cpp",
+    "VM/src/ldebug.cpp",
+    "VM/src/ldo.cpp",
+    "VM/src/lfunc.cpp",
+    "VM/src/lgc.cpp",
+    "VM/src/lgcdebug.cpp",
+    "VM/src/linit.cpp",
+    "VM/src/lmathlib.cpp",
+    "VM/src/lmem.cpp",
+    "VM/src/lnumprint.cpp",
+    "VM/src/lobject.cpp",
+    "VM/src/loslib.cpp",
+    "VM/src/lperf.cpp",
+    "VM/src/lstate.cpp",
+    "VM/src/lstring.cpp",
+    "VM/src/lstrlib.cpp",
+    "VM/src/ltable.cpp",
+    "VM/src/ltablib.cpp",
+    "VM/src/ltm.cpp",
+    "VM/src/ludata.cpp",
+    "VM/src/lutf8lib.cpp",
+    "VM/src/lvmexecute.cpp",
+    "VM/src/lvmload.cpp",
+    "VM/src/lvmutils.cpp",
 
     // Ast
-    LIB_LUAU ++ "Ast/src/Ast.cpp",
-    LIB_LUAU ++ "Ast/src/Confusables.cpp",
-    LIB_LUAU ++ "Ast/src/Lexer.cpp",
-    LIB_LUAU ++ "Ast/src/Location.cpp",
-    LIB_LUAU ++ "Ast/src/Parser.cpp",
-    LIB_LUAU ++ "Ast/src/StringUtils.cpp",
-    LIB_LUAU ++ "Ast/src/TimeTrace.cpp",
+    "Ast/src/Ast.cpp",
+    "Ast/src/Confusables.cpp",
+    "Ast/src/Lexer.cpp",
+    "Ast/src/Location.cpp",
+    "Ast/src/Parser.cpp",
+    "Ast/src/StringUtils.cpp",
+    "Ast/src/TimeTrace.cpp",
 };
