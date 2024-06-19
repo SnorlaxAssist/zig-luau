@@ -1,5 +1,5 @@
 # Zig-luau
-[![shield showing current tests status](https://github.com/SnorlaxAssist/zigluau/actions/workflows/tests.yml/badge.svg)](https://github.com/SnorlaxAssist/zigluau/actions/workflows/tests.yml)
+[![shield showing current tests status](https://github.com/SnorlaxAssist/zig-luau/actions/workflows/tests.yml/badge.svg)](https://github.com/SnorlaxAssist/zig-luau/actions/workflows/tests.yml)
 
 A Zig package that provides a complete and lightweight wrapper around the [Luau C API](https://www.lua.org/manual/5.4/manual.html#4). Zig-luau currently supports [Luau](https://luau-lang.org) and targets Zig. Tagged versions of Zig-luau are made for stable Zig releases.
 
