@@ -4,7 +4,7 @@
 const std = @import("std");
 
 // The ziglua module is made available in build.zig
-const zigluau = @import("zigluau");
+const luau = @import("luau");
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -14,14 +14,15 @@ pub fn main() anyerror!void {
     // Initialize The Lua vm and get a reference to the main thread
     //
     // Passing a Zig allocator to the Lua state requires a stable pointer
-    var lua = try zigluau.Luau.init(&allocator);
-    defer lua.deinit();
+    var L = try luau.Luau.init(&allocator);
+    defer L.deinit();
 
     // Open all Lua standard libraries
-    lua.openLibs();
+    L.openLibs();
 
     var stdin = std.io.getStdIn().reader();
     var stdout = std.io.getStdOut().writer();
+    
 
     var buffer: [256]u8 = undefined;
     while (true) {
@@ -39,26 +40,26 @@ pub fn main() anyerror!void {
         buffer[len] = 0;
 
         // Compile a line of Luau code
-        const bytecode = try zigluau.compile(allocator, buffer[0..len :0], .{});
-        lua.loadBytecode("CLI", bytecode) catch |err| switch (err) {
+        const bytecode = try luau.compile(allocator, buffer[0..len :0], .{});
+        defer allocator.free(bytecode);
+        L.loadBytecode("CLI", bytecode) catch |err| switch (err) {
             error.Fail => {
                 // If there was an error, Lua will place an error string on the top of the stack.
                 // Here we print out the string to inform the user of the issue.
-                try stdout.print("{s}\n", .{lua.toString(-1) catch unreachable});
+                try stdout.print("{s}\n", .{L.toString(-1) catch unreachable});
 
                 // Remove the error from the stack and go back to the prompt
-                lua.pop(1);
-                return;
+                L.pop(1);
+                continue;
             },
             else => unreachable,
         };
-        allocator.free(bytecode);
 
         // Execute a line of Lua code
-        lua.pcall(0, 0, 0) catch {
+        L.pcall(0, 0, 0) catch {
             // Error handling here is the same as above.
-            try stdout.print("{s}\n", .{lua.toString(-1) catch unreachable});
-            lua.pop(1);
+            try stdout.print("{s}\n", .{L.toString(-1) catch unreachable});
+            L.pop(1);
         };
     }
 }

@@ -1,12 +1,12 @@
 const std = @import("std");
 const testing = std.testing;
 
-const zigluau = @import("zigluau");
+const luau = @import("luau");
 
-const AllocFn = zigluau.AllocFn;
-const Buffer = zigluau.Buffer;
-const DebugInfo = zigluau.DebugInfo;
-const Luau = zigluau.Luau;
+const AllocFn = luau.AllocFn;
+const Buffer = luau.Buffer;
+const DebugInfo = luau.DebugInfo;
+const Luau = luau.Luau;
 
 const expect = testing.expect;
 const expectEqual = testing.expectEqual;
@@ -49,7 +49,7 @@ fn failing_alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize
 test "initialization" {
     // initialize the Zig wrapper
     var lua = try Luau.init(&testing.allocator);
-    try expectEqual(zigluau.Status.ok, lua.status());
+    try expectEqual(luau.Status.ok, lua.status());
     lua.deinit();
 
     // attempt to initialize the Zig wrapper with no memory
@@ -226,7 +226,7 @@ test "type of and getting values" {
     try expectEqual(.function, lua.typeOf(-1));
     try expect(lua.isCFunction(-1));
     try expect(lua.isFunction(-1));
-    try expectEqual(zigluau.toCFn(add), try lua.toCFunction(-1));
+    try expectEqual(luau.toCFn(add), try lua.toCFunction(-1));
 
     lua.pushString("hello world");
     try expectEqualStrings("hello world", try lua.toString(-1));
@@ -405,8 +405,8 @@ test "function registration" {
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    const funcs = [_]zigluau.FnReg{
-        .{ .name = "add", .func = zigluau.toCFn(add) },
+    const funcs = [_]luau.FnReg{
+        .{ .name = "add", .func = luau.toCFn(add) },
     };
     lua.newTable();
     lua.registerFns(null, &funcs);
@@ -435,8 +435,8 @@ test "warn fn" {
     defer lua.deinit();
 
     const warnFn = struct {
-        fn inner(luau : *Luau) i32 {
-            const msg = luau.toString(1) catch unreachable;
+        fn inner(L: *Luau) i32 {
+            const msg = L.toString(1) catch unreachable;
             if (!std.mem.eql(u8, msg, "this will be caught by the warnFn")) std.debug.panic("test failed", .{});
             return 0;
         }
@@ -444,7 +444,7 @@ test "warn fn" {
 
     lua.pushFunction(warnFn, "newWarn");
     lua.pushValue(-1);
-    lua.setField(zigluau.GLOBALSINDEX, "warn");
+    lua.setField(luau.GLOBALSINDEX, "warn");
     lua.pushString("this will be caught by the warnFn");
     lua.call(1, 0);
 }
@@ -532,7 +532,7 @@ test "upvalues" {
 
     // Initialize the counter at 0
     lua.pushInteger(0);
-    lua.pushClosure(zigluau.toCFn(counter), "counter", 1);
+    lua.pushClosure(luau.toCFn(counter), "counter", 1);
     lua.setGlobal("counter");
 
     // call the function repeatedly, each time ensuring the result increases by one
@@ -562,7 +562,7 @@ test "raise error" {
     try expectEqualStrings("makeError made an error", try lua.toString(-1));
 }
 
-fn continuation(l: *Luau, status: zigluau.Status, ctx: isize) i32 {
+fn continuation(l: *Luau, status: luau.Status, ctx: isize) i32 {
     _ = status;
 
     if (ctx == 5) {
@@ -571,7 +571,7 @@ fn continuation(l: *Luau, status: zigluau.Status, ctx: isize) i32 {
     } else {
         // yield the current context value
         l.pushInteger(ctx);
-        return l.yieldCont(1, ctx + 1, zigluau.wrap(continuation));
+        return l.yieldCont(1, ctx + 1, luau.wrap(continuation));
     }
 }
 
@@ -584,7 +584,7 @@ fn continuation52(l: *Luau) i32 {
     } else {
         // yield the current context value
         l.pushInteger(ctx);
-        return l.yieldCont(1, ctx + 1, zigluau.wrap(continuation52));
+        return l.yieldCont(1, ctx + 1, luau.wrap(continuation52));
     }
 }
 
@@ -761,7 +761,7 @@ test "ref luau" {
     _ = lua.pushString("Hello there");
     const ref = try lua.ref(2);
 
-    _ = lua.rawGetIndex(zigluau.REGISTRYINDEX, ref);
+    _ = lua.rawGetIndex(luau.REGISTRYINDEX, ref);
     try expectEqualStrings("Hello there", try lua.toString(-1));
 
     lua.unref(ref);
@@ -808,7 +808,7 @@ test "compile and run bytecode" {
 
     // Load bytecode
     const src = "return 133";
-    const bc = try zigluau.compile(testing.allocator, src, zigluau.CompileOptions{});
+    const bc = try luau.compile(testing.allocator, src, luau.CompileOptions{});
     defer testing.allocator.free(bc);
 
     try lua.loadBytecode("...", bc);
@@ -818,13 +818,13 @@ test "compile and run bytecode" {
 
     // Try mutable globals.  Calls to mutable globals should produce longer bytecode.
     const src2 = "Foo.print()\nBar.print()";
-    const bc1 = try zigluau.compile(testing.allocator, src2, zigluau.CompileOptions{});
+    const bc1 = try luau.compile(testing.allocator, src2, luau.CompileOptions{});
     defer testing.allocator.free(bc1);
 
-    const options = zigluau.CompileOptions{
+    const options = luau.CompileOptions{
         .mutable_globals = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
     };
-    const bc2 = try zigluau.compile(testing.allocator, src2, options);
+    const bc2 = try luau.compile(testing.allocator, src2, options);
     defer testing.allocator.free(bc2);
     // A really crude check for changed bytecode.  Better would be to match
     // produced bytecode in text format, but the API doesn't support it.
@@ -864,7 +864,7 @@ fn vectorCtor(l: *Luau) i32 {
     const x = l.toNumber(1) catch unreachable;
     const y = l.toNumber(2) catch unreachable;
     const z = l.toNumber(3) catch unreachable;
-    if (zigluau.luau_vector_size == 4) {
+    if (luau.luau_vector_size == 4) {
         const w = l.optNumber(4, 0);
         l.pushVector(@floatCast(x), @floatCast(y), @floatCast(z), @floatCast(w));
     } else {
@@ -880,4 +880,56 @@ fn foo(a: i32, b: i32) i32 {
 fn bar(a: i32, b: i32) !i32 {
     if (a > b) return error.wrong;
     return a + b;
+}
+
+test "debug stacktrace" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit(); // forces dtors to be called at the latest
+
+    const stackTrace = struct {
+        fn inner(l: *Luau) i32 {
+            l.pushString(l.debugTrace());
+            return 1;
+        }
+    }.inner;
+    lua.pushFunction(stackTrace, "test");
+    try lua.pcall(0, 1, 0);
+    try expectEqualStrings("[C] function test\n", try lua.toString(-1));
+}
+
+test "debug stacktrace luau" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit(); // forces dtors to be called at the latest
+
+    const src =
+        \\function MyFunction()
+        \\  return stack()
+        \\end
+        \\
+        \\return MyFunction()
+        \\
+    ;
+
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+    });
+    defer testing.allocator.free(bc);
+
+    const stackTrace = struct {
+        fn inner(l: *Luau) i32 {
+            l.pushString(l.debugTrace());
+            return 1;
+        }
+    }.inner;
+    lua.pushFunction(stackTrace, "stack");
+    lua.setGlobal("stack");
+
+    try lua.loadBytecode("module", bc);
+    try lua.pcall(0, 1, 0);
+    try expectEqualStrings(
+        \\[C] function stack
+        \\[string "module"]:2 function MyFunction
+        \\[string "module"]:5
+        \\
+    , try lua.toString(-1));
 }

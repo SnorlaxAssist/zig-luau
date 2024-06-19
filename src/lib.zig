@@ -43,7 +43,6 @@ pub const ZigUserdataDtorFn = *const fn (data: *anyopaque) void;
 /// Type for C useratom callback
 pub const CUserAtomCallbackFn = *const fn (str: [*c]const u8, len: usize) callconv(.C) i16;
 
-
 /// The internal Luau debug structure
 const Debug = c.lua_Debug;
 
@@ -247,21 +246,21 @@ pub const CodeGen = struct {
         return c.luau_codegen_supported() == 1;
     }
 
-    pub fn Create(luau : *Luau) void {
-        c.luau_codegen_create(zConverter.LuauToState(luau));
+    pub fn Create(luau: *Luau) void {
+        c.luau_codegen_create(StateConverter.LuauToState(luau));
     }
 
-    pub fn Compile(luau : *Luau, idx : i32) void {
-        c.luau_codegen_compile(zConverter.LuauToState(luau), @intCast(idx));
+    pub fn Compile(luau: *Luau, idx: i32) void {
+        c.luau_codegen_compile(StateConverter.LuauToState(luau), @intCast(idx));
     }
 };
 
-pub const zNative = c;
-pub const zConverter = struct {
-    pub fn LuauToState(luau : *Luau) *LuaState {
+pub const CNative = c;
+pub const StateConverter = struct {
+    pub fn LuauToState(luau: *Luau) *LuaState {
         return @ptrCast(luau);
     }
-    pub fn StateToLuau(state : *LuaState) *Luau {
+    pub fn StateToLuau(state: *LuaState) *Luau {
         return @ptrCast(state);
     }
 };
@@ -474,7 +473,7 @@ pub const Luau = struct {
 
     /// Pushes onto the stack the value of the global name
     pub fn getGlobal(luau: *Luau, name: [:0]const u8) !LuaType {
-        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(zConverter.LuauToState(luau), name.ptr));
+        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(StateConverter.LuauToState(luau), name.ptr));
         if (lua_type == .nil) return error.Fail;
         return lua_type;
     }
@@ -504,7 +503,7 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a boolean
     pub fn isBoolean(luau: *Luau, index: i32) bool {
-        return c.lua_isboolean(zConverter.LuauToState(luau), index);
+        return c.lua_isboolean(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a CFn
@@ -514,27 +513,27 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a function (C or Luau)
     pub fn isFunction(luau: *Luau, index: i32) bool {
-        return c.lua_isfunction(zConverter.LuauToState(luau), index);
+        return c.lua_isfunction(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a light userdata
     pub fn isLightUserdata(luau: *Luau, index: i32) bool {
-        return c.lua_islightuserdata(zConverter.LuauToState(luau), index);
+        return c.lua_islightuserdata(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is nil
     pub fn isNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnil(zConverter.LuauToState(luau), index);
+        return c.lua_isnil(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the given index is not valid
     pub fn isNone(luau: *Luau, index: i32) bool {
-        return c.lua_isnone(zConverter.LuauToState(luau), index);
+        return c.lua_isnone(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the given index is not valid or if the value at the index is nil
     pub fn isNoneOrNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnoneornil(zConverter.LuauToState(luau), index);
+        return c.lua_isnoneornil(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a number
@@ -549,12 +548,12 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a table
     pub fn isTable(luau: *Luau, index: i32) bool {
-        return c.lua_istable(zConverter.LuauToState(luau), index);
+        return c.lua_istable(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a thread
     pub fn isThread(luau: *Luau, index: i32) bool {
-        return c.lua_isthread(zConverter.LuauToState(luau), index);
+        return c.lua_isthread(StateConverter.LuauToState(luau), index);
     }
 
     /// Returns true if the value at the given index is a userdata (full or light)
@@ -580,7 +579,7 @@ pub const Luau = struct {
     /// Creates a new empty table and pushes it onto the stack
     /// Equivalent to createTable(0, 0)
     pub fn newTable(luau: *Luau) void {
-        c.lua_newtable(zConverter.LuauToState(luau));
+        c.lua_newtable(StateConverter.LuauToState(luau));
     }
 
     /// Creates a new thread, pushes it on the stack, and returns a Luau state that represents the new thread
@@ -594,7 +593,7 @@ pub const Luau = struct {
     pub fn newUserdata(luau: *Luau, comptime T: type) *T {
         // safe to .? because this function throws a Luau error on out of memory
         // so the returned pointer should never be null
-        const ptr = c.lua_newuserdata(zConverter.LuauToState(luau), @sizeOf(T)).?;
+        const ptr = c.lua_newuserdata(StateConverter.LuauToState(luau), @sizeOf(T)).?;
         return opaqueCast(T, ptr);
     }
 
@@ -602,7 +601,7 @@ pub const Luau = struct {
     /// Returns a slice to the Luau-owned data.
     pub fn newUserdataSlice(luau: *Luau, comptime T: type, size: usize) []T {
         // safe to .? because this function throws a Luau error on out of memory
-        const ptr = c.lua_newuserdata(zConverter.LuauToState(luau), @sizeOf(T) * size).?;
+        const ptr = c.lua_newuserdata(StateConverter.LuauToState(luau), @sizeOf(T) * size).?;
         return @as([*]T, @ptrCast(@alignCast(ptr)))[0..size];
     }
 
@@ -657,7 +656,7 @@ pub const Luau = struct {
 
     /// Push a formatted string onto the stack and return a pointer to the string
     pub fn pushFString(luau: *Luau, fmt: [:0]const u8, args: anytype) [*:0]const u8 {
-        return @call(.auto, c.lua_pushfstringL, .{ zConverter.LuauToState(luau), fmt.ptr } ++ args);
+        return @call(.auto, c.lua_pushfstringL, .{ StateConverter.LuauToState(luau), fmt.ptr } ++ args);
     }
 
     /// Pushes an integer with value `n` onto the stack
@@ -667,7 +666,7 @@ pub const Luau = struct {
 
     /// Pushes a light userdata onto the stack
     pub fn pushLightUserdata(luau: *Luau, ptr: *anyopaque) void {
-        c.lua_pushlightuserdata(zConverter.LuauToState(luau), ptr);
+        c.lua_pushlightuserdata(StateConverter.LuauToState(luau), ptr);
     }
 
     /// Pushes the bytes onto the stack
@@ -751,7 +750,7 @@ pub const Luau = struct {
     }
 
     /// Starts and resumes a coroutine in the thread
-   pub fn resumeThread(luau: *Luau, from: ?*Luau, num_args: i32) !ResumeStatus {
+    pub fn resumeThread(luau: *Luau, from: ?*Luau, num_args: i32) !ResumeStatus {
         const from_state: ?*LuaState = if (from) |from_val| @ptrCast(from_val) else null;
         const thread_status = c.lua_resume(@ptrCast(luau), from_state, num_args);
         switch (thread_status) {
@@ -761,7 +760,6 @@ pub const Luau = struct {
             else => return @enumFromInt(thread_status),
         }
     }
-
 
     /// Pops a table from the stack and sets it as the new environment for the value at the
     /// given index. Returns an error if the value at that index is not a function or thread or userdata.
@@ -777,7 +775,7 @@ pub const Luau = struct {
 
     /// Pops a value from the stack and sets it as the new value of global `name`
     pub fn setGlobal(luau: *Luau, name: [:0]const u8) void {
-        c.lua_setglobal(zConverter.LuauToState(luau), name.ptr);
+        c.lua_setglobal(StateConverter.LuauToState(luau), name.ptr);
     }
 
     /// Pops a table or nil from the stack and sets that value as the new metatable for the
@@ -855,7 +853,7 @@ pub const Luau = struct {
     /// If the value was a number the actual value in the stack will be changed to a string
     pub fn toString(luau: *Luau, index: i32) ![:0]const u8 {
         var length: usize = undefined;
-        if (c.lua_tolstring(@ptrCast(luau), index, &length)) |str| return str[0..length:0];
+        if (c.lua_tolstring(@ptrCast(luau), index, &length)) |str| return str[0..length :0];
         return error.Fail;
     }
 
@@ -917,6 +915,11 @@ pub const Luau = struct {
     //
     // The debug interface functions are included in alphabetical order
     // Each is kept similar to the original C API function while also making it easy to use from Zig
+
+    /// Warning: this function is not thread-safe since it stores the result in a shared global array! Only use for debugging.
+    pub fn debugTrace(luau: *Luau) [:0]const u8 {
+        return std.mem.span(c.lua_debugtrace(@ptrCast(luau)));
+    }
 
     /// Gets information about a specific function or function invocation.
     pub fn getInfo(luau: *Luau, level: i32, options: DebugInfo.Options, info: *DebugInfo) void {
@@ -999,7 +1002,7 @@ pub const Luau = struct {
 
     /// Raises an error reporting a problem with argument `arg` of the C function that called it
     pub fn argError(luau: *Luau, arg: i32, extra_msg: [*:0]const u8) noreturn {
-        _ = c.luaL_argerror(zConverter.LuauToState(luau), arg, extra_msg);
+        _ = c.luaL_argerror(StateConverter.LuauToState(luau), arg, extra_msg);
         unreachable;
     }
 
@@ -1071,7 +1074,6 @@ pub const Luau = struct {
         return c.luaL_checkunsigned(@ptrCast(luau), arg, null);
     }
 
-
     /// Checks whether the function argument `arg` has type `t`
     pub fn checkType(luau: *Luau, arg: i32, t: LuaType) void {
         c.luaL_checktype(@ptrCast(luau), arg, @intFromEnum(t));
@@ -1095,7 +1097,7 @@ pub const Luau = struct {
 
     /// Raises an error
     pub fn raiseErrorStr(luau: *Luau, fmt: [:0]const u8, args: anytype) noreturn {
-        _ = @call(.auto, c.luaL_errorL, .{ zConverter.LuauToState(luau), fmt.ptr } ++ args);
+        _ = @call(.auto, c.luaL_errorL, .{ StateConverter.LuauToState(luau), fmt.ptr } ++ args);
         unreachable;
     }
 
@@ -1315,7 +1317,6 @@ pub const Luau = struct {
     pub fn sandboxThread(luau: *Luau) void {
         c.luaL_sandboxthread(@ptrCast(luau));
     }
-
 };
 
 /// A string buffer allowing for Zig code to build Luau strings piecemeal

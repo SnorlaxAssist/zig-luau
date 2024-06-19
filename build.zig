@@ -17,35 +17,35 @@ pub fn build(b: *Build) !void {
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
 
     // Zig module
-    const zigluau = b.addModule("zigluau", .{
-        .root_source_file = .{ .path = "src/lib.zig" },
+    const luauModule = b.addModule("zig-luau", .{
+        .root_source_file = b.path("src/lib.zig"),
     });
 
-    // Expose build configuration to the ziglua module
+    // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
-    zigluau.addOptions("config", config);
+    luauModule.addOptions("config", config);
 
     const vector_size: usize = if (use_4_vector) 4 else 3;
-    zigluau.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
+    luauModule.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
 
     const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
     b.installArtifact(lib);
 
-    zigluau.addIncludePath(luau_dep.path("Common/include"));
-    zigluau.addIncludePath(luau_dep.path("Compiler/include"));
-    zigluau.addIncludePath(luau_dep.path("Ast/include"));
-    zigluau.addIncludePath(luau_dep.path("VM/include"));
+    luauModule.addIncludePath(luau_dep.path("Common/include"));
+    luauModule.addIncludePath(luau_dep.path("Compiler/include"));
+    luauModule.addIncludePath(luau_dep.path("Ast/include"));
+    luauModule.addIncludePath(luau_dep.path("VM/include"));
 
-    zigluau.linkLibrary(lib);
+    luauModule.linkLibrary(lib);
 
     // Tests
     const tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/tests.zig" },
+        .root_source_file = b.path("src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
-    tests.root_module.addImport("zigluau", zigluau);
+    tests.root_module.addImport("luau", luauModule);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run zigluau tests");
@@ -54,6 +54,8 @@ pub fn build(b: *Build) !void {
     // Examples
     const examples = [_]struct { []const u8, []const u8 }{
         .{ "luau-bytecode", "examples/luau-bytecode.zig" },
+        .{ "repl", "examples/repl.zig" },
+        .{ "zig-fn", "examples/zig-fn.zig" },
     };
 
     for (examples) |example| {
@@ -63,7 +65,7 @@ pub fn build(b: *Build) !void {
             .target = target,
             .optimize = optimize,
         });
-        exe.root_module.addImport("zigluau", zigluau);
+        exe.root_module.addImport("luau", luauModule);
 
         const artifact = b.addInstallArtifact(exe, .{});
         const exe_step = b.step(b.fmt("install-example-{s}", .{example[0]}), b.fmt("Install {s} example", .{example[0]}));
@@ -78,13 +80,13 @@ pub fn build(b: *Build) !void {
     }
 
     const docs = b.addStaticLibrary(.{
-        .name = "zigluau",
-        .root_source_file = .{ .path = "src/lib.zig" },
+        .name = "zig-luau",
+        .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
     docs.root_module.addOptions("config", config);
-    docs.root_module.addImport("zigluau", zigluau);
+    docs.root_module.addImport("luau", luauModule);
 
     const install_docs = b.addInstallDirectory(.{
         .source_dir = docs.getEmittedDocs(),
@@ -102,7 +104,7 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency : *Build.Depend
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = std.SemanticVersion{ .major = 0, .minor = 626, .patch = 0 },
+        .version = std.SemanticVersion{ .major = 0, .minor = 630, .patch = 0 },
     });
 
     for (LUAU_HEADER_DIRS) |dir| {
@@ -121,7 +123,7 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency : *Build.Depend
     for (LUAU_SOURCE_FILES) |file| {
         lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
     }
-    lib.addCSourceFile(.{ .file = .{ .path = "src/luau.cpp" }, .flags = &FLAGS });
+    lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = &FLAGS });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
