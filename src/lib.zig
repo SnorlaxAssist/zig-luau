@@ -568,6 +568,7 @@ pub const Luau = struct {
         return c.lua_isbuffer(stateCast(luau), index);
     }
 
+    /// Returns true if the value at the given index is a vector
     pub fn isVector(luau: *Luau, index: i32) bool {
         return c.lua_isvector(stateCast(luau), index);
     }
@@ -1168,7 +1169,7 @@ pub const Luau = struct {
         return str[0..length :0];
     }
 
-    pub fn checkUnsigned(luau: *Luau, arg: i32) [*:0]const u8 {
+    pub fn checkUnsigned(luau: *Luau, arg: i32) Unsigned {
         return c.luaL_checkunsigned(stateCast(luau), arg, null);
     }
 
@@ -1262,9 +1263,9 @@ pub const Luau = struct {
         return luau.checkNumber(arg);
     }
 
-    /// If the function argument `arg` is a number, returns the number
+    /// If the function argument `arg` is a boolean, returns the boolean
     /// If the argument is absent or nil returns `default`
-    pub fn optBoolean(luau: *Luau, arg: i32) ?Number {
+    pub fn optBoolean(luau: *Luau, arg: i32) ?bool {
         if (luau.isNoneOrNil(arg)) return null;
         return luau.checkBoolean(arg);
     }
@@ -1276,16 +1277,22 @@ pub const Luau = struct {
         return luau.checkString(arg);
     }
 
+    /// If the function argument `arg` is a usigned integer, returns the integer
+    /// If the argument is absent or nil returns `default`
     pub fn optUnsigned(luau: *Luau, arg: i32) ?Unsigned {
         if (luau.isNoneOrNil(arg)) return null;
         return luau.checkUnsigned(arg);
     }
 
+    /// If the function argument `arg` is a buffer, returns the buffer
+    /// If the argument is absent or nil returns `default`
     pub fn optBuffer(luau: *Luau, arg: i32) ?[]u8 {
         if (luau.isNoneOrNil(arg)) return null;
         return luau.toBuffer(arg);
     }
 
+    /// If the function argument `arg` is a vector, returns the vector
+    /// If the argument is absent or nil returns `default`
     pub fn optVector(luau: *Luau, arg: i32) ?[]const f32 {
         if (luau.isNoneOrNil(arg)) return null;
         return luau.toVector(arg);
