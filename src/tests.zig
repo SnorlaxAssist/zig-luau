@@ -4,7 +4,7 @@ const testing = std.testing;
 const luau = @import("luau");
 
 const AllocFn = luau.AllocFn;
-const Buffer = luau.Buffer;
+const StringBuffer = luau.StringBuffer;
 const DebugInfo = luau.DebugInfo;
 const Luau = luau.Luau;
 
@@ -351,7 +351,7 @@ test "string buffers" {
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
 
-    var buffer: Buffer = undefined;
+    var buffer: StringBuffer = undefined;
     buffer.init(lua);
 
     buffer.addChar('z');
@@ -822,7 +822,7 @@ test "compile and run bytecode" {
     defer testing.allocator.free(bc1);
 
     const options = luau.CompileOptions{
-        .mutable_globals = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
+        .mutable_globals  = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
     };
     const bc2 = try luau.compile(testing.allocator, src2, options);
     defer testing.allocator.free(bc2);
@@ -925,11 +925,251 @@ test "debug stacktrace luau" {
     lua.setGlobal("stack");
 
     try lua.loadBytecode("module", bc);
-    try lua.pcall(0, 1, 0);
+    try lua.pcall(0, 1, 0); // CALL main()
+
     try expectEqualStrings(
         \\[C] function stack
         \\[string "module"]:2 function MyFunction
         \\[string "module"]:5
         \\
     , try lua.toString(-1));
+}
+
+test "buffers" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit(); // forces dtors to be called at the latest
+
+    lua.openBase();
+    lua.openBuffer();
+
+    const buf = try lua.newBuffer(12);
+
+    try expectEqual(12, buf.len);
+
+    @memcpy(buf, "Hello, world");
+
+    try expect(lua.isBuffer(-1));
+    try expectEqualStrings("Hello, world", buf);
+    try expectEqualStrings("Hello, world", try lua.toBuffer(-1));
+
+    const src =
+        \\function MyFunction(buf)
+        \\  assert(buffer.tostring(buf) == "Hello, world")
+        \\  local newBuf = buffer.create(4);
+        \\  buffer.writeu8(newBuf, 0, 82)
+        \\  buffer.writeu8(newBuf, 1, 101)
+        \\  buffer.writeu8(newBuf, 2, 115)
+        \\  buffer.writeu8(newBuf, 3, 116)
+        \\  return newBuf
+        \\end
+        \\
+        \\return MyFunction
+        \\
+    ;
+
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+    });
+    defer testing.allocator.free(bc);
+
+    try lua.loadBytecode("module", bc);
+    try lua.pcall(0, 1, 0); // CALL main()
+
+    lua.pushValue(-2);
+    try lua.pcall(1, 1, 0); // CALL MyFunction(buf)
+
+    const newBuf = lua.checkBuffer(-1);
+    try expectEqual(4, newBuf.len);
+    try expectEqualStrings("Rest", newBuf);
+}
+
+test "Set Api" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit(); // forces dtors to be called at the latest
+
+    lua.openBase();
+
+    const vectorFn = struct {
+        fn inner(l: *Luau) i32 {
+            const x : f32 = @floatCast(l.optNumber(1) orelse 0.0);
+            const y : f32 = @floatCast(l.optNumber(2) orelse 0.0);
+            const z : f32 = @floatCast(l.optNumber(3) orelse 0.0);
+        
+            if (luau.VECTOR_SIZE == 3) {
+                l.pushVector(x, y, z, null);
+            } else {
+                const w : f32 = @floatCast(l.optNumber(4) orelse 0.0);
+                l.pushVector(x, y, z, w);
+            }
+
+            return 1;
+        }
+    }.inner;
+    lua.setGlobalFn("vector", vectorFn);
+
+    const src =
+        \\function MyFunction(api)
+        \\  assert(type(api.a) == "function"); api.a()
+        \\  assert(type(api.b) == "boolean" and api.b == true);
+        \\  assert(type(api.c) == "number" and api.c == 1.1);
+        \\  assert(type(api.d) == "number" and api.d == 2);
+        \\  assert(type(api.e) == "string" and api.e == "Api");
+        \\  assert(type(api.pos) == "vector" and api.pos.X == 1 and api.pos.Y == 2 and api.pos.Z == 3);
+        \\
+        \\  assert(type(_a) == "function"); _a()
+        \\  assert(type(_b) == "boolean" and _b == true);
+        \\  assert(type(_c) == "number" and _c == 1.1);
+        \\  assert(type(_d) == "number" and _d == 2);
+        \\  assert(type(_e) == "string" and _e == "Api");
+        \\  assert(type(_pos) == "vector" and _pos.X == 1 and _pos.Y == 2 and _pos.Z == 3);
+        \\  
+        \\  assert(type(gl_a) == "function"); gl_a()
+        \\  assert(type(gl_b) == "boolean" and gl_b == true);
+        \\  assert(type(gl_c) == "number" and gl_c == 1.1);
+        \\  assert(type(gl_d) == "number" and gl_d == 2);
+        \\  assert(type(gl_e) == "string" and gl_e == "Api");
+        \\  assert(type(gl_pos) == "vector" and gl_pos.X == 1 and gl_pos.Y == 2 and gl_pos.Z == 3);
+        \\end
+        \\
+        \\return MyFunction
+        \\
+    ;
+
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+        .optimization_level = 0,
+        .vector_ctor = "vector",
+        .vector_type = "vector",
+    });
+    defer testing.allocator.free(bc);
+
+    const tempFn = struct {
+        fn inner(l: *Luau) i32 {
+            _ = l.getGlobal("count") catch luau.LuaType.nil;
+            l.pushInteger((l.toInteger(-1) catch 0) + 1);
+            l.setGlobal("count");
+            return 0;
+        }
+    }.inner;
+    lua.newTable();
+    lua.setFieldFn(-1, "a", tempFn);
+    lua.setFieldBoolean(-1, "b", true);
+    lua.setFieldNumber(-1, "c", 1.1);
+    lua.setFieldInteger(-1, "d", 2);
+    lua.setFieldString(-1, "e", "Api");
+    if (luau.VECTOR_SIZE == 3) {
+        lua.setFieldVector(-1, "pos", 1.0, 2.0, 3.0, null);
+    } else {
+        lua.setFieldVector(-1, "pos", 1.0, 2.0, 3.0, 4.0);
+    }
+
+    lua.setFieldFn(luau.GLOBALSINDEX, "_a", tempFn);
+    lua.setFieldBoolean(luau.GLOBALSINDEX, "_b", true);
+    lua.setFieldNumber(luau.GLOBALSINDEX, "_c", 1.1);
+    lua.setFieldInteger(luau.GLOBALSINDEX, "_d", 2);
+    lua.setFieldString(luau.GLOBALSINDEX, "_e", "Api");
+    if (luau.VECTOR_SIZE == 3) {
+        lua.setFieldVector(luau.GLOBALSINDEX, "_pos", 1.0, 2.0, 3.0, null);
+    } else {
+        lua.setFieldVector(luau.GLOBALSINDEX, "_pos", 1.0, 2.0, 3.0, 4.0);
+    }
+
+    lua.setGlobalFn("gl_a", tempFn);
+    lua.setGlobalBoolean("gl_b", true);
+    lua.setGlobalNumber("gl_c", 1.1);
+    lua.setGlobalInteger("gl_d", 2);
+    lua.setGlobalString("gl_e", "Api");
+    if (luau.VECTOR_SIZE == 3) {
+        lua.setGlobalVector("gl_pos", 1.0, 2.0, 3.0, null);
+    } else {
+        lua.setGlobalVector("gl_pos", 1.0, 2.0, 3.0, 4.0);
+    }
+
+    try lua.loadBytecode("module", bc);
+    try lua.pcall(0, 1, 0); // CALL main()
+
+    lua.pushValue(-2);
+    lua.pcall(1, 1, 0) catch {
+        std.debug.panic("error: {s}\n", .{ try lua.toString(-1) });
+    };
+
+    _ = try lua.getGlobal("count");
+    try expectEqual(3, try lua.toInteger(-1));
+}
+
+test "Vectors" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit(); // forces dtors to be called at the latest
+
+    lua.openBase();
+    lua.openString();
+    lua.openMath();
+
+    const vectorFn = struct {
+        fn inner(l: *Luau) i32 {
+            const x : f32 = @floatCast(l.optNumber(1) orelse 0.0);
+            const y : f32 = @floatCast(l.optNumber(2) orelse 0.0);
+            const z : f32 = @floatCast(l.optNumber(3) orelse 0.0);
+        
+            if (luau.VECTOR_SIZE == 3) {
+                l.pushVector(x, y, z, null);
+            } else {
+                const w : f32 = @floatCast(l.optNumber(4) orelse 0.0);
+                l.pushVector(x, y, z, w);
+            }
+
+            return 1;
+        }
+    }.inner;
+
+    const src =
+        \\function MyFunction()
+        \\  local vec = vector(0, 1.1, 2.2);
+        \\  assert(type(vec) == "vector")
+        \\  assert(vec.X == 0);
+        \\  assert(math.round(vec.Y*100)/100 == 1.1); -- 1.100000023841858
+        \\  assert(math.round(vec.Z*100)/100 == 2.2); -- 2.200000047683716
+        \\  return vec
+        \\end
+        \\
+        \\return MyFunction()
+        \\
+    ;
+
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+        .optimization_level = 0,
+        .vector_ctor = "vector",
+        .vector_type = "vector",
+    });
+    defer testing.allocator.free(bc);
+
+    lua.setGlobalFn("vector", vectorFn);
+
+    try lua.loadBytecode("module", bc);
+    try lua.pcall(0, 1, 0); // CALL main()
+
+    try expect(lua.isVector(-1));
+    const vec = try lua.toVector(-1);
+    try expectEqual(luau.VECTOR_SIZE, vec.len);
+    try expectEqual(0.0, vec[0]);
+    try expectEqual(1.1, vec[1]);
+    try expectEqual(2.2, vec[2]);
+    if (luau.VECTOR_SIZE == 4) {
+        try expectEqual(0.0, vec[3]);
+    }
+
+    if (luau.VECTOR_SIZE == 3) {
+        lua.pushVector(0.0, 1.0, 0.0, null);
+    } else {
+        lua.pushVector(0.0, 1.0, 0.0, 0.0);
+    }
+    const vec2 = lua.checkVector(-1);
+    try expectEqual(luau.VECTOR_SIZE, vec2.len);
+    try expectEqual(0.0, vec2[0]);
+    try expectEqual(1.0, vec2[1]);
+    try expectEqual(0.0, vec2[2]);
+    if (luau.VECTOR_SIZE == 4) {
+        try expectEqual(0.0, vec2[3]);
+    }
 }
