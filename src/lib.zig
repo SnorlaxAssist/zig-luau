@@ -681,6 +681,16 @@ pub const Luau = struct {
         c.lua_pushinteger(stateCast(luau), n);
     }
 
+    /// Pushes a float with value `n` onto the stack
+    pub fn pushNumber(luau: *Luau, n: Number) void {
+        c.lua_pushnumber(stateCast(luau), n);
+    }
+
+    /// Pushes a usigned integer with value `n` onto the stack
+    pub fn pushUnsigned(luau: *Luau, n: Unsigned) void {
+        c.lua_pushunsigned(stateCast(luau), n);
+    }
+
     /// Pushes a light userdata onto the stack
     pub fn pushLightUserdata(luau: *Luau, ptr: *anyopaque) void {
         c.lua_pushlightuserdata(StateConverter.LuauToState(luau), ptr);
@@ -694,11 +704,6 @@ pub const Luau = struct {
     /// Pushes a nil value onto the stack
     pub fn pushNil(luau: *Luau) void {
         c.lua_pushnil(stateCast(luau));
-    }
-
-    /// Pushes a float with value `n` onto the stack
-    pub fn pushNumber(luau: *Luau, n: Number) void {
-        c.lua_pushnumber(stateCast(luau), n);
     }
 
     /// Pushes a zero-terminated string onto the stack
@@ -816,12 +821,16 @@ pub const Luau = struct {
         luau.pushBoolean(value);
         luau.setFieldAhead(index, k);
     }
+    pub fn setFieldInteger(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Integer) void {
+        luau.pushInteger(value);
+        luau.setFieldAhead(index, k);
+    }
     pub fn setFieldNumber(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Number) void {
         luau.pushNumber(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldInteger(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Integer) void {
-        luau.pushInteger(value);
+    pub fn setFieldUnsigned(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Unsigned) void {
+        luau.pushUnsigned(value);
         luau.setFieldAhead(index, k);
     }
     pub fn setFieldString(luau: *Luau, comptime index: i32, k: [:0]const u8, value : [:0]const u8) void {
@@ -841,12 +850,16 @@ pub const Luau = struct {
         luau.pushBoolean(value);
         luau.setGlobal(name);
     }
+    pub fn setGlobalInteger(luau: *Luau, name: [:0]const u8, value : Integer) void {
+        luau.pushInteger(value);
+        luau.setGlobal(name);
+    }
     pub fn setGlobalNumber(luau: *Luau, name: [:0]const u8, value : Number) void {
         luau.pushNumber(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalInteger(luau: *Luau, name: [:0]const u8, value : Integer) void {
-        luau.pushInteger(value);
+    pub fn setGlobalUnsigned(luau: *Luau, name: [:0]const u8, value : Unsigned) void {
+        luau.pushUnsigned(value);
         luau.setGlobal(name);
     }
     pub fn setGlobalString(luau: *Luau, name: [:0]const u8, value : [:0]const u8) void {
@@ -898,15 +911,6 @@ pub const Luau = struct {
         return result;
     }
 
-    /// Converts the Luau value at the given `index` to a zero-terminated many-itemed-pointer (string)
-    /// Returns an error if the conversion failed
-    /// If the value was a number the actual value in the stack will be changed to a string
-    pub fn toString(luau: *Luau, index: i32) ![:0]const u8 {
-        var length: usize = undefined;
-        if (c.lua_tolstring(stateCast(luau), index, &length)) |str| return str[0..length :0];
-        return error.Fail;
-    }
-
     /// Converts the Luau value at the given `index` to a float
     /// The Luau value must be a number or a string convertible to a number otherwise toNumber returns 0
     pub fn toNumber(luau: *Luau, index: i32) !Number {
@@ -914,6 +918,24 @@ pub const Luau = struct {
         const result = c.lua_tonumberx(stateCast(luau), index, &success);
         if (success == 0) return error.Fail;
         return result;
+    }
+
+    /// Converts the Luau value at the given `index` to a unsigned integer
+    /// The Luau value must be an integer, or a number, or a string convertible to an integer otherwise toInteger returns 0
+    pub fn toUnsigned(luau: *Luau, index: i32) !Unsigned {
+        var success: c_int = undefined;
+        const result = c.lua_tounsignedx(stateCast(luau), index, &success);
+        if (success == 0) return error.Fail;
+        return result;
+    }
+
+    /// Converts the Luau value at the given `index` to a zero-terminated many-itemed-pointer (string)
+    /// Returns an error if the conversion failed
+    /// If the value was a number the actual value in the stack will be changed to a string
+    pub fn toString(luau: *Luau, index: i32) ![:0]const u8 {
+        var length: usize = undefined;
+        if (c.lua_tolstring(stateCast(luau), index, &length)) |str| return str[0..length :0];
+        return error.Fail;
     }
 
     /// Converts the value at the given `index` to an opaque pointer
@@ -1107,6 +1129,16 @@ pub const Luau = struct {
         return c.luaL_checkinteger(stateCast(luau), arg);
     }
 
+    /// Checks whether the function argument `arg` is a number and returns the number
+    pub fn checkNumber(luau: *Luau, arg: i32) Number {
+        return c.luaL_checknumber(stateCast(luau), arg);
+    }
+
+    /// Checks whether the function argument `arg` is a number and returns the number cast to an unsigned Integer
+    pub fn checkUnsigned(luau: *Luau, arg: i32) Unsigned {
+        return c.luaL_checkunsigned(stateCast(luau), arg);
+    }
+
     /// Checks whether the function argument `arg` is a slice of bytes and returns the slice
     pub fn checkBytes(luau: *Luau, arg: i32) [:0]const u8 {
         var length: usize = 0;
@@ -1126,11 +1158,6 @@ pub const Luau = struct {
         const ptr = c.luaL_checkvector(stateCast(luau), arg);
         // luaL_checkvector never returns null (throws luau error)
         return @as([*]const f32, @ptrCast(@alignCast(ptr.?)))[0..VECTOR_SIZE];
-    }
-
-    /// Checks whether the function argument `arg` is a number and returns the number
-    pub fn checkNumber(luau: *Luau, arg: i32) Number {
-        return c.luaL_checknumber(stateCast(luau), arg);
     }
 
     /// Checks whether the function argument `arg` is a string and searches for the enum value with the same name in `T`.
@@ -1167,10 +1194,6 @@ pub const Luau = struct {
         const str = c.luaL_checklstring(stateCast(luau), arg, &length);
         // luaL_checklstring never returns null (throws lua error)
         return str[0..length :0];
-    }
-
-    pub fn checkUnsigned(luau: *Luau, arg: i32) Unsigned {
-        return c.luaL_checkunsigned(stateCast(luau), arg, null);
     }
 
     /// Checks whether the function argument `arg` has type `t`

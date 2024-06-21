@@ -201,6 +201,12 @@ test "type of and getting values" {
     try expectEqual(1, try lua.toInteger(-1));
     try expectEqualStrings("number", lua.typeNameIndex(-1));
 
+    lua.pushUnsigned(4);
+    try expectEqual(.number, lua.typeOf(-1));
+    try expect(lua.isNumber(-1));
+    try expectEqual(4, try lua.toUnsigned(-1));
+    try expectEqualStrings("number", lua.typeNameIndex(-1));
+
     var value: i32 = 0;
     lua.pushLightUserdata(&value);
     try expectEqual(.light_userdata, lua.typeOf(-1));
