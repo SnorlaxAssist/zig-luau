@@ -3,8 +3,6 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LIB_LUAU = "";
-
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
     b.top_level_steps = .{};
@@ -32,10 +30,8 @@ pub fn build(b: *Build) !void {
     const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
     b.installArtifact(lib);
 
-    luauModule.addIncludePath(luau_dep.path("Common/include"));
-    luauModule.addIncludePath(luau_dep.path("Compiler/include"));
-    luauModule.addIncludePath(luau_dep.path("Ast/include"));
     luauModule.addIncludePath(luau_dep.path("VM/include"));
+    luauModule.addIncludePath(luau_dep.path("CodeGen/include"));
 
     luauModule.linkLibrary(lib);
 
@@ -61,7 +57,7 @@ pub fn build(b: *Build) !void {
     for (examples) |example| {
         const exe = b.addExecutable(.{
             .name = example[0],
-            .root_source_file = .{ .path = example[1] },
+            .root_source_file = b.path(example[1]),
             .target = target,
             .optimize = optimize,
         });
@@ -99,17 +95,20 @@ pub fn build(b: *Build) !void {
 }
 
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
-fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency : *Build.Dependency, optimize: std.builtin.OptimizeMode, use_4_vector: bool) !*Step.Compile {
+fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Dependency, optimize: std.builtin.OptimizeMode, use_4_vector: bool) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = std.SemanticVersion{ .major = 0, .minor = 627, .patch = 0 },
+        .version = std.SemanticVersion{ .major = 0, .minor = 631, .patch = 0 },
     });
 
     for (LUAU_HEADER_DIRS) |dir| {
         lib.addIncludePath(dependency.path(dir));
     }
+
+    // Rewrite luacode.h with modified luacode.h to work with zig compiler
+    try std.fs.copyFileAbsolute(b.path("src/Compiler/include/luacode.h").getPath(b), dependency.path("Compiler/include/luacode.h").getPath(b), std.fs.Dir.CopyFileOptions{});
 
     const FLAGS = [_][]const u8{
         "-DLUA_USE_LONGJMP=1",

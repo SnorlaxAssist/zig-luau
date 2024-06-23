@@ -19,6 +19,16 @@ extern "c" fn zig_registerAssertionHandler() void;
 /// This function is defined in luau.cpp and ensures Zig uses the correct free when compiling luau code
 extern "c" fn zig_luau_free(ptr: *anyopaque) void;
 
+// NCG Workarounds - Minimal Debug Support for NCG
+/// Luau.CodeGen mock __register_frame for a workaround Luau NCG
+export fn __register_frame(frame: *const u8) void {
+    _ = frame;
+}
+/// Luau.CodeGen mock __deregister_frame for a workaround Luau NCG
+export fn __deregister_frame(frame: *const u8) void {
+    _ = frame;
+}
+
 const Allocator = std.mem.Allocator;
 
 // Types
@@ -241,20 +251,6 @@ pub fn Parsed(comptime T: type) type {
     };
 }
 
-pub const CodeGen = struct {
-    pub fn Supported() bool {
-        return c.luau_codegen_supported() == 1;
-    }
-
-    pub fn Create(luau: *Luau) void {
-        c.luau_codegen_create(StateConverter.LuauToState(luau));
-    }
-
-    pub fn Compile(luau: *Luau, idx: i32) void {
-        c.luau_codegen_compile(StateConverter.LuauToState(luau), @intCast(idx));
-    }
-};
-
 pub const CNative = c;
 pub const StateConverter = struct {
     pub fn LuauToState(luau: *Luau) *LuaState {
@@ -266,6 +262,20 @@ pub const StateConverter = struct {
 };
 
 const stateCast = StateConverter.LuauToState;
+
+pub const CodeGen = struct {
+    pub fn Supported() bool {
+        return c.luau_codegen_supported() == 1;
+    }
+
+    pub fn Create(luau: *Luau) void {
+        c.luau_codegen_create(stateCast(luau));
+    }
+
+    pub fn Compile(luau: *Luau, idx: i32) void {
+        c.luau_codegen_compile(stateCast(luau), @intCast(idx));
+    }
+};
 
 /// A Zig wrapper around the Luau C API
 /// Represents a Luau state or thread and contains the entire state of the Luau interpreter

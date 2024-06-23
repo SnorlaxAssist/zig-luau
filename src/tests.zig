@@ -852,7 +852,7 @@ test "userdata dtor" {
     // create a Luau-owned pointer to a Data, configure Data with a destructor.
     {
         var lua = try Luau.init(&testing.allocator);
-        defer lua.deinit(); // forces dtors to be called at the latest
+        defer lua.deinit();
 
         var data = lua.newUserdataDtor(Data, Data.dtor);
         data.gc_hits_ptr = &gc_hits;
@@ -890,7 +890,7 @@ fn bar(a: i32, b: i32) !i32 {
 
 test "debug stacktrace" {
     var lua = try Luau.init(&testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
+    defer lua.deinit();
 
     const stackTrace = struct {
         fn inner(l: *Luau) i32 {
@@ -905,7 +905,7 @@ test "debug stacktrace" {
 
 test "debug stacktrace luau" {
     var lua = try Luau.init(&testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
+    defer lua.deinit();
 
     const src =
         \\function MyFunction()
@@ -943,7 +943,7 @@ test "debug stacktrace luau" {
 
 test "buffers" {
     var lua = try Luau.init(&testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
+    defer lua.deinit();
 
     lua.openBase();
     lua.openBuffer();
@@ -991,7 +991,7 @@ test "buffers" {
 
 test "Set Api" {
     var lua = try Luau.init(&testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
+    defer lua.deinit();
 
     lua.openBase();
 
@@ -1105,7 +1105,7 @@ test "Set Api" {
 
 test "Vectors" {
     var lua = try Luau.init(&testing.allocator);
-    defer lua.deinit(); // forces dtors to be called at the latest
+    defer lua.deinit();
 
     lua.openBase();
     lua.openString();
@@ -1178,4 +1178,34 @@ test "Vectors" {
     if (luau.VECTOR_SIZE == 4) {
         try expectEqual(0.0, vec2[3]);
     }
+}
+
+test "Luau JIT/CodeGen" {
+    // Skip this test if the Luau NCG is not supported on machine
+    if (!luau.CodeGen.Supported()) return;
+
+    var lua = try Luau.init(&std.heap.c_allocator);
+    defer lua.deinit();
+    luau.CodeGen.Create(lua);
+
+    lua.openBase();
+
+    const src =
+        \\function MyFunction()
+        \\  return 133
+        \\end
+        \\
+        \\return MyFunction()
+    ;
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+        .optimization_level = 2,
+    });
+    defer testing.allocator.free(bc);
+
+    try lua.loadBytecode("module", bc);
+
+    luau.CodeGen.Compile(lua, -1);
+
+    try lua.pcall(0, 1, 0); // CALL main()
 }
