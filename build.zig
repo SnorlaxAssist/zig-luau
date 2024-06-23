@@ -30,6 +30,7 @@ pub fn build(b: *Build) !void {
     const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
     b.installArtifact(lib);
 
+    luauModule.addIncludePath(luau_dep.path("Compiler/include"));
     luauModule.addIncludePath(luau_dep.path("VM/include"));
     luauModule.addIncludePath(luau_dep.path("CodeGen/include"));
 
