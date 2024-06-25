@@ -185,6 +185,9 @@ pub const MULTRET = c.LUA_MULTRET;
 /// Type of floats in Luau (typically an f64)
 pub const Number = c.lua_Number;
 
+/// The unsigned version of Integer
+pub const Unsigned = c.lua_Unsigned;
+
 /// The type of the reader function used by `Luau.load()`
 // pub const CReaderFn = *const fn (state: ?*LuaState, data: ?*anyopaque, size: [*c]usize) callconv(.C) [*c]const u8;
 
@@ -227,8 +230,6 @@ const StatusCode = struct {
     pub const err_gcmm = unreachable;
 };
 
-/// The unsigned version of Integer
-pub const Unsigned = c.lua_Unsigned;
 
 /// The type of warning functions used by Luau to emit warnings
 // pub const CWarnFn = @compileError("CWarnFn not defined");
@@ -250,6 +251,30 @@ pub fn Parsed(comptime T: type) type {
         }
     };
 }
+
+pub const Metamethods = struct {
+    pub const index = "__index";
+    pub const newindex = "__newindex";
+    pub const call = "__call";
+    pub const concat = "__concat";
+    pub const unm = "__unm";
+    pub const add = "__add";
+    pub const sub = "__sub";
+    pub const mul = "__mul";
+    pub const div = "__div";
+    pub const idiv = "__idiv";
+    pub const mod = "__mod";
+    pub const pow = "__pow";
+    pub const tostring = "__tostring";
+    pub const metatable = "__metatable";
+    pub const eq = "__eq";
+    pub const lt = "__lt";
+    pub const le = "__le";
+    pub const mode = "__mode";
+    pub const len = "__len";
+    pub const iter = "__iter";
+    pub const typename = "__type";
+};
 
 pub const CNative = c;
 pub const StateConverter = struct {
@@ -438,10 +463,20 @@ pub const Luau = struct {
         return c.lua_gc(stateCast(luau), c.LUA_GCSETSTEPSIZE, size);
     }
 
-    pub fn newUserdataDtor(luau: *Luau, comptime T: type, dtor_fn: ZigUserdataDtorFn) *T {
+    pub fn newUserdataTagged(luau: *Luau, comptime T: type, size: usize, tag: c_int) !*T {
+        if (c.lua_newuserdatatagged(stateCast(luau), size, tag)) |ptr| return opaqueCast(T, ptr);
+        return error.Fail;
+    }
+
+    pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn(ptr: *T) void) *T {
+        const dtorCfn = struct {
+            fn inner(ptr: ?*anyopaque) callconv(.C) void {
+                if (ptr) |p| @call(.always_inline, dtorfn, .{@as(*T, @ptrCast(@alignCast(p)))});
+            }
+        }.inner;
         // safe to .? because this function throws a Lua error on out of memory
         // so the returned pointer should never be null
-        const ptr = c.lua_newuserdatadtor(stateCast(luau), @sizeOf(T), @ptrCast(dtor_fn)).?;
+        const ptr = c.lua_newuserdatadtor(stateCast(luau), @sizeOf(T), @ptrCast(&dtorCfn)).?;
         return @ptrCast(@alignCast(ptr));
     }
 
@@ -485,7 +520,7 @@ pub const Luau = struct {
 
     /// Pushes onto the stack the value of the global name
     pub fn getGlobal(luau: *Luau, name: [:0]const u8) !LuaType {
-        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(StateConverter.LuauToState(luau), name.ptr));
+        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(stateCast(luau), name.ptr));
         if (lua_type == .nil) return error.Fail;
         return lua_type;
     }
@@ -499,6 +534,11 @@ pub const Luau = struct {
     /// Pushes onto the stack the value t[k] where t is the value at the given index and k is the value on the top of the stack
     pub fn getTable(luau: *Luau, index: i32) LuaType {
         return @enumFromInt(c.lua_gettable(stateCast(luau), index));
+    }
+
+    /// Returns a boolean indicating if the lua object at index is read-only
+    pub fn getReadOnly(luau: *Luau, index: i32) bool {
+        return c.lua_getreadonly(stateCast(luau), index) == 1;
     }
 
     /// Returns the index of the top element in the stack
@@ -515,7 +555,7 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a boolean
     pub fn isBoolean(luau: *Luau, index: i32) bool {
-        return c.lua_isboolean(StateConverter.LuauToState(luau), index);
+        return c.lua_isboolean(stateCast(luau), index);
     }
 
     /// Returns true if the value at the given index is a CFn
@@ -525,27 +565,27 @@ pub const Luau = struct {
 
     /// Returns true if the value at the given index is a function (C or Luau)
     pub fn isFunction(luau: *Luau, index: i32) bool {
-        return c.lua_isfunction(StateConverter.LuauToState(luau), index);
+        return c.lua_isfunction(stateCast(luau), index);
     }
 
     /// Returns true if the value at the given index is a light userdata
     pub fn isLightUserdata(luau: *Luau, index: i32) bool {
-        return c.lua_islightuserdata(StateConverter.LuauToState(luau), index);
+        return c.lua_islightuserdata(stateCast(luau), index);
     }
 
     /// Returns true if the value at the given index is nil
     pub fn isNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnil(StateConverter.LuauToState(luau), index);
+        return c.lua_isnil(stateCast(luau), index);
     }
 
     /// Returns true if the given index is not valid
     pub fn isNone(luau: *Luau, index: i32) bool {
-        return c.lua_isnone(StateConverter.LuauToState(luau), index);
+        return c.lua_isnone(stateCast(luau), index);
     }
 
     /// Returns true if the given index is not valid or if the value at the index is nil
     pub fn isNoneOrNil(luau: *Luau, index: i32) bool {
-        return c.lua_isnoneornil(StateConverter.LuauToState(luau), index);
+        return c.lua_isnoneornil(stateCast(luau), index);
     }
 
     /// Returns true if the value at the given index is a number
@@ -601,7 +641,7 @@ pub const Luau = struct {
     /// Creates a new empty table and pushes it onto the stack
     /// Equivalent to createTable(0, 0)
     pub fn newTable(luau: *Luau) void {
-        c.lua_newtable(StateConverter.LuauToState(luau));
+        c.lua_newtable(stateCast(luau));
     }
 
     /// Creates a new thread, pushes it on the stack, and returns a Luau state that represents the new thread
@@ -615,7 +655,7 @@ pub const Luau = struct {
     pub fn newUserdata(luau: *Luau, comptime T: type) *T {
         // safe to .? because this function throws a Luau error on out of memory
         // so the returned pointer should never be null
-        const ptr = c.lua_newuserdata(StateConverter.LuauToState(luau), @sizeOf(T)).?;
+        const ptr = c.lua_newuserdata(stateCast(luau), @sizeOf(T)).?;
         return opaqueCast(T, ptr);
     }
 
@@ -623,12 +663,12 @@ pub const Luau = struct {
     /// Returns a slice to the Luau-owned data.
     pub fn newUserdataSlice(luau: *Luau, comptime T: type, size: usize) []T {
         // safe to .? because this function throws a Luau error on out of memory
-        const ptr = c.lua_newuserdata(StateConverter.LuauToState(luau), @sizeOf(T) * size).?;
+        const ptr = c.lua_newuserdata(stateCast(luau), @sizeOf(T) * size).?;
         return @as([*]T, @ptrCast(@alignCast(ptr)))[0..size];
     }
 
     pub fn newBuffer(luau: *Luau, size: usize) ![]u8 {
-        if (c.lua_newbuffer(StateConverter.LuauToState(luau), size)) |ptr| return @as([*]u8, @ptrCast(@alignCast(ptr)))[0..size];
+        if (c.lua_newbuffer(stateCast(luau), size)) |ptr| return @as([*]u8, @ptrCast(@alignCast(ptr)))[0..size];
         return error.Fail;
     }
 
@@ -683,7 +723,7 @@ pub const Luau = struct {
 
     /// Push a formatted string onto the stack and return a pointer to the string
     pub fn pushFString(luau: *Luau, fmt: [:0]const u8, args: anytype) [*:0]const u8 {
-        return @call(.auto, c.lua_pushfstringL, .{ StateConverter.LuauToState(luau), fmt.ptr } ++ args);
+        return @call(.auto, c.lua_pushfstringL, .{ stateCast(luau), fmt.ptr } ++ args);
     }
 
     /// Pushes an integer with value `n` onto the stack
@@ -703,7 +743,7 @@ pub const Luau = struct {
 
     /// Pushes a light userdata onto the stack
     pub fn pushLightUserdata(luau: *Luau, ptr: *anyopaque) void {
-        c.lua_pushlightuserdata(StateConverter.LuauToState(luau), ptr);
+        c.lua_pushlightuserdata(stateCast(luau), ptr);
     }
 
     /// Pushes the bytes onto the stack
@@ -815,7 +855,7 @@ pub const Luau = struct {
 
     /// Pops a value from the stack and sets it as the new value of global `name`
     pub fn setGlobal(luau: *Luau, name: [:0]const u8) void {
-        c.lua_setglobal(StateConverter.LuauToState(luau), name.ptr);
+        c.lua_setglobal(stateCast(luau), name.ptr);
     }
 
     pub fn setFieldAhead(luau: *Luau, comptime index: i32, k: [:0]const u8) void {
@@ -892,6 +932,11 @@ pub const Luau = struct {
     /// v is the value on the top of the stack, and k is the value just below the top
     pub fn setTable(luau: *Luau, index: i32) void {
         c.lua_settable(stateCast(luau), index);
+    }
+
+    /// Sets read-only of the lua object at index
+    pub fn setReadOnly(luau: *Luau, index : i32, enabled: bool) void {
+        c.lua_setreadonly(stateCast(luau), index, if (enabled) 1 else 0);
     }
 
     /// Sets the top of the stack to `index`
@@ -984,6 +1029,11 @@ pub const Luau = struct {
             const size = @as(u32, @intCast(luau.objectLen(index))) / @sizeOf(T);
             return @as([*]T, @ptrCast(@alignCast(ptr)))[0..size];
         }
+        return error.Fail;
+    }
+
+    pub fn toUserdataTagged(luau: *Luau, comptime T: type, index: i32, tag: i32) !*T {
+        if (c.lua_touserdatatagged(stateCast(luau), index, tag)) |ptr| return opaqueCast(T, ptr);
         return error.Fail;
     }
 
@@ -1116,7 +1166,7 @@ pub const Luau = struct {
 
     /// Raises an error reporting a problem with argument `arg` of the C function that called it
     pub fn argError(luau: *Luau, arg: i32, extra_msg: [*:0]const u8) noreturn {
-        _ = c.luaL_argerror(StateConverter.LuauToState(luau), arg, extra_msg);
+        _ = c.luaL_argerror(stateCast(luau), arg, extra_msg);
         unreachable;
     }
 
@@ -1229,7 +1279,7 @@ pub const Luau = struct {
 
     /// Raises an error
     pub fn raiseErrorStr(luau: *Luau, fmt: [:0]const u8, args: anytype) noreturn {
-        _ = @call(.auto, c.luaL_errorL, .{ StateConverter.LuauToState(luau), fmt.ptr } ++ args);
+        _ = @call(.auto, c.luaL_errorL, .{ stateCast(luau), fmt.ptr } ++ args);
         unreachable;
     }
 

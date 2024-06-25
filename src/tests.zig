@@ -837,24 +837,23 @@ test "compile and run bytecode" {
     try expect(bc1.len < bc2.len);
 }
 
+const DataDtor = struct {
+    gc_hits_ptr: *i32,
+
+    pub fn dtor(self: *DataDtor) void {
+        self.gc_hits_ptr.* = self.gc_hits_ptr.* + 1;
+    }
+};
+
 test "userdata dtor" {
     var gc_hits: i32 = 0;
-
-    const Data = struct {
-        gc_hits_ptr: *i32,
-
-        pub fn dtor(udata: *anyopaque) void {
-            const self: *@This() = @alignCast(@ptrCast(udata));
-            self.gc_hits_ptr.* = self.gc_hits_ptr.* + 1;
-        }
-    };
 
     // create a Luau-owned pointer to a Data, configure Data with a destructor.
     {
         var lua = try Luau.init(&testing.allocator);
         defer lua.deinit();
 
-        var data = lua.newUserdataDtor(Data, Data.dtor);
+        var data = lua.newUserdataDtor(DataDtor, DataDtor.dtor);
         data.gc_hits_ptr = &gc_hits;
         try expectEqual(@as(*anyopaque, @ptrCast(data)), try lua.toPointer(1));
         try expectEqual(0, gc_hits);
@@ -1208,4 +1207,67 @@ test "Luau JIT/CodeGen" {
     luau.CodeGen.Compile(lua, -1);
 
     try lua.pcall(0, 1, 0); // CALL main()
+}
+
+test "Readonly table" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    lua.newTable();
+    lua.setReadOnly(-1, true);
+    lua.setGlobal("List");
+
+     const src =
+        \\List[1] = "test"
+    ;
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+        .optimization_level = 2,
+    });
+    defer testing.allocator.free(bc);
+
+    try lua.loadBytecode("module", bc);
+
+    try expectError(error.Runtime, lua.pcall(0, 0, 0)); // CALL main()
+}
+
+test "Metamethods" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    lua.openLibs();
+
+    try lua.newMetatable("MyMetatable");
+
+    lua.setFieldFn(-1, luau.Metamethods.index, struct {
+        fn inner(l: *Luau) i32 {
+            l.checkType(1, .table);
+            const key = l.toString(2) catch unreachable;
+            expectEqualStrings("test", key) catch unreachable;
+            l.pushString("Hello, world");
+            return 1;
+        }
+    }.inner);
+
+    lua.setFieldFn(-1, luau.Metamethods.tostring, struct {
+        fn inner(l: *Luau) i32 {
+            l.checkType(1, .table);
+            l.pushString("MyMetatable");
+            return 1;
+        }
+    }.inner);
+
+    lua.newTable();
+    lua.pushValue(-2);
+    lua.setMetatable(-2);
+
+    try expectEqual(.string, lua.getField(-1, "test"));
+    try expectEqualStrings("Hello, world", try lua.toString(-1));
+    lua.pop(1);
+
+    try expectEqual(.function, try lua.getGlobal("tostring"));
+    lua.pushValue(-2);
+    try lua.pcall(1, 1, 0);
+    try expectEqualStrings("MyMetatable", try lua.toString(-1));
+    lua.pop(1);
 }
