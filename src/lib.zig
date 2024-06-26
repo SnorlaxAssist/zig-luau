@@ -274,6 +274,7 @@ pub const Metamethods = struct {
     pub const len = "__len";
     pub const iter = "__iter";
     pub const typename = "__type";
+    pub const namecall = "__namecall";
 };
 
 pub const CNative = c;
