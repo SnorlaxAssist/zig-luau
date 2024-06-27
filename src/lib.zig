@@ -1321,6 +1321,11 @@ pub const Luau = struct {
         } else return error.Memory;
     }
 
+    pub fn nameCallAtom(luau: *Luau) [:0]const u8 {
+        if (c.lua_namecallatom(stateCast(luau), null)) |str| return std.mem.span(str);
+        return error.Fail;
+    }
+
     // luaL_opt (a macro) really isn't that useful, so not going to implement for now
 
     /// If the function argument `arg` is an integer, returns the integer
