@@ -1321,7 +1321,7 @@ pub const Luau = struct {
         } else return error.Memory;
     }
 
-    pub fn nameCallAtom(luau: *Luau) [:0]const u8 {
+    pub fn nameCallAtom(luau: *Luau) ![:0]const u8 {
         if (c.lua_namecallatom(stateCast(luau), null)) |str| return std.mem.span(str);
         return error.Fail;
     }
