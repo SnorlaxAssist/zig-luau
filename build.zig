@@ -108,9 +108,6 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
         lib.addIncludePath(dependency.path(dir));
     }
 
-    // Rewrite luacode.h with modified luacode.h to work with zig compiler
-    try std.fs.copyFileAbsolute(b.path("src/Compiler/include/luacode.h").getPath(b), dependency.path("Compiler/include/luacode.h").getPath(b), std.fs.Dir.CopyFileOptions{});
-
     const FLAGS = [_][]const u8{
         "-DLUA_USE_LONGJMP=1",
         "-DLUA_API=extern\"C\"",

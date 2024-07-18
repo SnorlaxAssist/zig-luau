@@ -492,14 +492,32 @@ test "threads" {
     defer lua.deinit();
 
     var new_thread = lua.newThread();
+    
     try expectEqual(1, lua.getTop());
     try expectEqual(0, new_thread.getTop());
 
     lua.pushInteger(10);
     lua.pushNil();
 
+    try expectEqual(3, lua.getTop());
+
     lua.xMove(new_thread, 2);
+
     try expectEqual(2, new_thread.getTop());
+    try expectEqual(1, lua.getTop());
+
+    var new_thread2 = lua.newThread();
+
+    try expectEqual(2, lua.getTop());
+    try expectEqual(0, new_thread2.getTop());
+
+    lua.pushNil();
+
+    lua.xPush(new_thread2, -1);
+
+    try expectEqual(3, lua.getTop());
+    try expectEqual(1, new_thread2.getTop());
+    try expectEqual(.nil, new_thread2.typeOf(1));
 }
 
 test "userdata and uservalues" {

@@ -278,7 +278,7 @@ pub const Metamethods = struct {
 };
 
 pub const CNative = c;
-pub const StateConverter = struct {
+pub const State = struct {
     pub fn LuauToState(luau: *Luau) *LuaState {
         return @ptrCast(luau);
     }
@@ -287,7 +287,7 @@ pub const StateConverter = struct {
     }
 };
 
-const stateCast = StateConverter.LuauToState;
+const stateCast = State.LuauToState;
 
 pub const CodeGen = struct {
     pub fn Supported() bool {
@@ -1070,6 +1070,11 @@ pub const Luau = struct {
         c.lua_xmove(stateCast(luau), stateCast(to), num);
     }
 
+    /// Pushes value at index from the current stack onto the stack of `to`
+    pub fn xPush(luau: *Luau, to: *Luau, idx: i32) void {
+        c.lua_xpush(stateCast(luau), stateCast(to), idx);
+    }
+
     /// Yields a coroutine
     /// This function must be used as the return expression of a function
     pub fn yield(luau: *Luau, num_results: i32) i32 {
@@ -1774,4 +1779,8 @@ pub fn compile(allocator: Allocator, source: []const u8, options: CompileOptions
     if (bytecode == null) return error.Memory;
     defer zig_luau_free(bytecode);
     return try allocator.dupe(u8, bytecode[0..size]);
+}
+
+pub fn clock() f64 {
+    return c.lua_clock();
 }

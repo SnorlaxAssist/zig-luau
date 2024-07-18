@@ -1,10 +1,10 @@
 .{
     .name = "zigluau",
-    .version = "0.1.0",
+    .version = "0.1.23",
     .dependencies = .{
         .luau = .{
-            .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.631.tar.gz",
-            .hash = "1220b028e1d5f5ce6bac4876b1d20cf8533b9ffe68cfdee2da30ffe65808bd415569",
+            .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.634.tar.gz",
+            .hash = "1220ff33289dfebe9d3950f42e21ccf8058ce3d480315901d558760b390143d07bde",
         },
     },
     .paths = .{""},
