@@ -101,7 +101,7 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = std.SemanticVersion{ .major = 0, .minor = 631, .patch = 0 },
+        .version = std.SemanticVersion{ .major = 0, .minor = 634, .patch = 0 },
     });
 
     for (LUAU_HEADER_DIRS) |dir| {
