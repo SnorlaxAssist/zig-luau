@@ -213,11 +213,12 @@ pub const Status = enum(u3) {
 };
 
 /// Coroutine Status a thread can be in.
-pub const CoroutineStatus = enum(u2) {
+pub const CoroutineStatus = enum(u3) {
     running = CoroutineStatusCode.running,
     suspended = CoroutineStatusCode.suspended,
     normal = CoroutineStatusCode.normal,
-    dead = 3,
+    finished = CoroutineStatusCode.finished,
+    err = CoroutineStatusCode.err,
 };
 
 /// Status codes
@@ -242,7 +243,7 @@ const CoroutineStatusCode = struct {
     pub const running = c.LUA_CORUN;
     pub const suspended = c.LUA_COSUS;
     pub const normal = c.LUA_CONOR;
-    pub const finish = c.LUA_COFIN;
+    pub const finished = c.LUA_COFIN;
     pub const err = c.LUA_COERR;
 };
 
@@ -864,9 +865,7 @@ pub const Luau = struct {
 
     /// Returns the coroutine status of given thread
     pub fn statusThread(luau: *Luau, co: *Luau) CoroutineStatus {
-        const costatus = c.lua_costatus(stateCast(luau), stateCast(co));
-        if (costatus == CoroutineStatusCode.err or costatus == CoroutineStatusCode.finish) return CoroutineStatus.dead;
-        return @enumFromInt(costatus);
+        return @enumFromInt(c.lua_costatus(stateCast(luau), stateCast(co)));
     }
 
     /// Pops a table from the stack and sets it as the new environment for the value at the

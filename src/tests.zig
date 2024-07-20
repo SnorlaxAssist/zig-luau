@@ -632,7 +632,7 @@ test "yielding no continuation" {
     try expectEqual(.suspended, lua.statusThread(thread));
     try expectEqual(1, thread.toInteger(-1));
     thread.resetThread();
-    try expectEqual(.dead, lua.statusThread(thread));
+    try expectEqual(.finished, lua.statusThread(thread));
 }
 
 test "aux check functions" {
