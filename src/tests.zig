@@ -624,9 +624,15 @@ test "yielding no continuation" {
         }
     }.inner;
     thread.pushFunction(func, "func");
+
+    try expectEqual(.suspended, lua.statusThread(thread));
+
     _ = try thread.resumeThread(null, 0);
 
+    try expectEqual(.suspended, lua.statusThread(thread));
     try expectEqual(1, thread.toInteger(-1));
+    thread.resetThread();
+    try expectEqual(.dead, lua.statusThread(thread));
 }
 
 test "aux check functions" {

@@ -212,6 +212,14 @@ pub const Status = enum(u3) {
     err_error = StatusCode.err_error,
 };
 
+/// Coroutine Status a thread can be in.
+pub const CoroutineStatus = enum(u2) {
+    running = CoroutineStatusCode.running,
+    suspended = CoroutineStatusCode.suspended,
+    normal = CoroutineStatusCode.normal,
+    dead = 3,
+};
+
 /// Status codes
 /// Not public, because typically Status.ok is returned from a function implicitly;
 /// Any function that returns an error usually returns a Zig error, and a void return
@@ -230,6 +238,13 @@ const StatusCode = struct {
     pub const err_gcmm = unreachable;
 };
 
+const CoroutineStatusCode = struct {
+    pub const running = c.LUA_CORUN;
+    pub const suspended = c.LUA_COSUS;
+    pub const normal = c.LUA_CONOR;
+    pub const finish = c.LUA_COFIN;
+    pub const err = c.LUA_COERR;
+};
 
 /// The type of warning functions used by Luau to emit warnings
 // pub const CWarnFn = @compileError("CWarnFn not defined");
@@ -840,6 +855,18 @@ pub const Luau = struct {
             StatusCode.err_error => return error.MsgHandler,
             else => return @enumFromInt(thread_status),
         }
+    }
+
+    /// Resets thread
+    pub fn resetThread(luau: *Luau) void {
+        c.lua_resetthread(stateCast(luau));
+    }
+
+    /// Returns the coroutine status of given thread
+    pub fn statusThread(luau: *Luau, co: *Luau) CoroutineStatus {
+        const costatus = c.lua_costatus(stateCast(luau), stateCast(co));
+        if (costatus == CoroutineStatusCode.err or costatus == CoroutineStatusCode.finish) return CoroutineStatus.dead;
+        return @enumFromInt(costatus);
     }
 
     /// Pops a table from the stack and sets it as the new environment for the value at the
