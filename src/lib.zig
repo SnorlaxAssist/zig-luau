@@ -743,6 +743,17 @@ pub const Luau = struct {
         return @call(.auto, c.lua_pushfstringL, .{ stateCast(luau), fmt.ptr } ++ args);
     }
 
+    /// Pushes a zero-terminated string onto the stack
+    /// Luau makes a copy of the string so `str` may be freed immediately after return
+    pub fn pushString(luau: *Luau, str: [:0]const u8) void {
+        c.lua_pushstring(stateCast(luau), str.ptr);
+    }
+
+    /// Pushes the bytes onto the stack
+    pub fn pushLString(luau: *Luau, bytes: []const u8) void {
+        c.lua_pushlstring(stateCast(luau), bytes.ptr, bytes.len);
+    }
+
     /// Pushes an integer with value `n` onto the stack
     pub fn pushInteger(luau: *Luau, n: Integer) void {
         c.lua_pushinteger(stateCast(luau), n);
@@ -763,20 +774,9 @@ pub const Luau = struct {
         c.lua_pushlightuserdata(stateCast(luau), ptr);
     }
 
-    /// Pushes the bytes onto the stack
-    pub fn pushLString(luau: *Luau, bytes: []const u8) void {
-        c.lua_pushlstring(stateCast(luau), bytes.ptr, bytes.len);
-    }
-
     /// Pushes a nil value onto the stack
     pub fn pushNil(luau: *Luau) void {
         c.lua_pushnil(stateCast(luau));
-    }
-
-    /// Pushes a zero-terminated string onto the stack
-    /// Luau makes a copy of the string so `str` may be freed immediately after return
-    pub fn pushString(luau: *Luau, str: [:0]const u8) void {
-        c.lua_pushstring(stateCast(luau), str.ptr);
     }
 
     /// Pushes this thread onto the stack
@@ -1558,6 +1558,10 @@ pub const Luau = struct {
 
     pub fn sandboxThread(luau: *Luau) void {
         c.luaL_sandboxthread(stateCast(luau));
+    }
+
+    pub fn setSafeEnv(luau: *Luau, idx: i32, enabled: bool) void {
+        c.lua_setsafeenv(stateCast(luau), idx, if (enabled) 1 else 0);
     }
 };
 

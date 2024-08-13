@@ -455,6 +455,22 @@ test "warn fn" {
     lua.call(1, 0);
 }
 
+test "string literal" {
+    const allocator = testing.allocator;
+    var lua = try Luau.init(&allocator);
+    defer lua.deinit();
+
+    const zbytes = [_:0]u8{'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd'};
+
+    lua.pushString(&zbytes);
+    const str1 = try lua.toString(-1);
+    try testing.expectEqualStrings("Hello ", str1);
+
+    lua.pushLString(&zbytes);
+    const str2 = try lua.toString(-1);
+    try testing.expectEqualStrings(&[_]u8{'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd'}, str2);
+}
+
 test "concat" {
     var lua = try Luau.init(&testing.allocator);
     defer lua.deinit();
