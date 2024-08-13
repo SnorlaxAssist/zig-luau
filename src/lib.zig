@@ -542,10 +542,10 @@ pub const Luau = struct {
         return lua_type;
     }
 
-    /// If the value at the given index has a metatable, the function pushes that metatable onto the stack
-    /// Otherwise an error is returned
-    pub fn getMetatable(luau: *Luau, index: i32) !void {
-        if (c.lua_getmetatable(stateCast(luau), index) == 0) return error.Fail;
+    /// If the value at the given index has a metatable, the function pushes that metatable onto the stack, returning true
+    /// Otherwise false is returned
+    pub fn getMetatable(luau: *Luau, index: i32) bool {
+        return c.lua_getmetatable(stateCast(luau), index) == 0;
     }
 
     /// Pushes onto the stack the value t[k] where t is the value at the given index and k is the value on the top of the stack
