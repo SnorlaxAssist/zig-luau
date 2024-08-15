@@ -485,7 +485,7 @@ pub const Luau = struct {
         return error.Fail;
     }
 
-    pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn(ptr: *T) void) *T {
+    pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn (ptr: *T) void) *T {
         const dtorCfn = struct {
             fn inner(ptr: ?*anyopaque) callconv(.C) void {
                 if (ptr) |p| @call(.always_inline, dtorfn, .{@as(*T, @ptrCast(@alignCast(p)))});
@@ -785,7 +785,7 @@ pub const Luau = struct {
         return c.lua_pushthread(stateCast(luau)) != 0;
     }
 
-    pub fn pushVector(luau: *Luau, x : f32, y : f32, z : f32, w : ?f32) void {
+    pub fn pushVector(luau: *Luau, x: f32, y: f32, z: f32, w: ?f32) void {
         if (VECTOR_SIZE == 3) {
             c.lua_pushvector(stateCast(luau), x, y, z);
         } else {
@@ -894,27 +894,31 @@ pub const Luau = struct {
         luau.pushFunction(zig_fn, k);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldBoolean(luau: *Luau, comptime index: i32, k: [:0]const u8, value : bool) void {
+    pub fn setFieldBoolean(luau: *Luau, comptime index: i32, k: [:0]const u8, value: bool) void {
         luau.pushBoolean(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldInteger(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Integer) void {
+    pub fn setFieldInteger(luau: *Luau, comptime index: i32, k: [:0]const u8, value: Integer) void {
         luau.pushInteger(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldNumber(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Number) void {
+    pub fn setFieldNumber(luau: *Luau, comptime index: i32, k: [:0]const u8, value: Number) void {
         luau.pushNumber(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldUnsigned(luau: *Luau, comptime index: i32, k: [:0]const u8, value : Unsigned) void {
+    pub fn setFieldUnsigned(luau: *Luau, comptime index: i32, k: [:0]const u8, value: Unsigned) void {
         luau.pushUnsigned(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldString(luau: *Luau, comptime index: i32, k: [:0]const u8, value : [:0]const u8) void {
+    pub fn setFieldString(luau: *Luau, comptime index: i32, k: [:0]const u8, value: [:0]const u8) void {
         luau.pushString(value);
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldVector(luau: *Luau, comptime index: i32, k: [:0]const u8, x : f32, y : f32, z : f32, w : ?f32) void {
+    pub fn setFieldLString(luau: *Luau, comptime index: i32, k: [:0]const u8, value: []const u8) void {
+        luau.pushLString(value);
+        luau.setFieldAhead(index, k);
+    }
+    pub fn setFieldVector(luau: *Luau, comptime index: i32, k: [:0]const u8, x: f32, y: f32, z: f32, w: ?f32) void {
         luau.pushVector(x, y, z, w);
         luau.setFieldAhead(index, k);
     }
@@ -923,27 +927,31 @@ pub const Luau = struct {
         luau.pushFunction(zig_fn, name);
         luau.setGlobal(name);
     }
-    pub fn setGlobalBoolean(luau: *Luau, name: [:0]const u8, value : bool) void {
+    pub fn setGlobalBoolean(luau: *Luau, name: [:0]const u8, value: bool) void {
         luau.pushBoolean(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalInteger(luau: *Luau, name: [:0]const u8, value : Integer) void {
+    pub fn setGlobalInteger(luau: *Luau, name: [:0]const u8, value: Integer) void {
         luau.pushInteger(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalNumber(luau: *Luau, name: [:0]const u8, value : Number) void {
+    pub fn setGlobalNumber(luau: *Luau, name: [:0]const u8, value: Number) void {
         luau.pushNumber(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalUnsigned(luau: *Luau, name: [:0]const u8, value : Unsigned) void {
+    pub fn setGlobalUnsigned(luau: *Luau, name: [:0]const u8, value: Unsigned) void {
         luau.pushUnsigned(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalString(luau: *Luau, name: [:0]const u8, value : [:0]const u8) void {
+    pub fn setGlobalString(luau: *Luau, name: [:0]const u8, value: [:0]const u8) void {
         luau.pushString(value);
         luau.setGlobal(name);
     }
-    pub fn setGlobalVector(luau: *Luau, name: [:0]const u8, x : f32, y : f32, z : f32, w : ?f32) void {
+    pub fn setGlobalLString(luau: *Luau, name: [:0]const u8, value: []const u8) void {
+        luau.pushLString(value);
+        luau.setGlobal(name);
+    }
+    pub fn setGlobalVector(luau: *Luau, name: [:0]const u8, x: f32, y: f32, z: f32, w: ?f32) void {
         luau.pushVector(x, y, z, w);
         luau.setGlobal(name);
     }
@@ -962,7 +970,7 @@ pub const Luau = struct {
     }
 
     /// Sets read-only of the lua object at index
-    pub fn setReadOnly(luau: *Luau, index : i32, enabled: bool) void {
+    pub fn setReadOnly(luau: *Luau, index: i32, enabled: bool) void {
         c.lua_setreadonly(stateCast(luau), index, if (enabled) 1 else 0);
     }
 

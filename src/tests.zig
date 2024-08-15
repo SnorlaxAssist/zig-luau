@@ -460,15 +460,18 @@ test "string literal" {
     var lua = try Luau.init(&allocator);
     defer lua.deinit();
 
-    const zbytes = [_:0]u8{'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd'};
+    const zbytes = [_:0]u8{ 'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd' };
+    try testing.expectEqual(zbytes.len, 12);
 
     lua.pushString(&zbytes);
     const str1 = try lua.toString(-1);
+    try testing.expectEqual(str1.len, 6);
     try testing.expectEqualStrings("Hello ", str1);
 
     lua.pushLString(&zbytes);
     const str2 = try lua.toString(-1);
-    try testing.expectEqualStrings(&[_]u8{'H', 'e', 'l', 'l', 'o', ' ', 0, 'W', 'o', 'r', 'l', 'd'}, str2);
+    try testing.expectEqual(str2.len, 12);
+    try testing.expectEqualStrings(&zbytes, str2);
 }
 
 test "concat" {
@@ -508,7 +511,7 @@ test "threads" {
     defer lua.deinit();
 
     var new_thread = lua.newThread();
-    
+
     try expectEqual(1, lua.getTop());
     try expectEqual(0, new_thread.getTop());
 
@@ -868,7 +871,7 @@ test "compile and run bytecode" {
     defer testing.allocator.free(bc1);
 
     const options = luau.CompileOptions{
-        .mutable_globals  = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
+        .mutable_globals = &[_:null]?[*:0]const u8{ "Foo", "Bar" },
     };
     const bc2 = try luau.compile(testing.allocator, src2, options);
     defer testing.allocator.free(bc2);
@@ -1033,17 +1036,18 @@ test "Set Api" {
     defer lua.deinit();
 
     lua.openBase();
+    lua.openString();
 
     const vectorFn = struct {
         fn inner(l: *Luau) i32 {
-            const x : f32 = @floatCast(l.optNumber(1) orelse 0.0);
-            const y : f32 = @floatCast(l.optNumber(2) orelse 0.0);
-            const z : f32 = @floatCast(l.optNumber(3) orelse 0.0);
-        
+            const x: f32 = @floatCast(l.optNumber(1) orelse 0.0);
+            const y: f32 = @floatCast(l.optNumber(2) orelse 0.0);
+            const z: f32 = @floatCast(l.optNumber(3) orelse 0.0);
+
             if (luau.VECTOR_SIZE == 3) {
                 l.pushVector(x, y, z, null);
             } else {
-                const w : f32 = @floatCast(l.optNumber(4) orelse 0.0);
+                const w: f32 = @floatCast(l.optNumber(4) orelse 0.0);
                 l.pushVector(x, y, z, w);
             }
 
@@ -1059,6 +1063,7 @@ test "Set Api" {
         \\  assert(type(api.c) == "number" and api.c == 1.1);
         \\  assert(type(api.d) == "number" and api.d == 2);
         \\  assert(type(api.e) == "string" and api.e == "Api");
+        \\  assert(type(api.f) == "string" and api.f == string.char(65, 0, 66) and api.f ~= "AB" and #api.f == 3);
         \\  assert(type(api.pos) == "vector" and api.pos.X == 1 and api.pos.Y == 2 and api.pos.Z == 3);
         \\
         \\  assert(type(_a) == "function"); _a()
@@ -1066,6 +1071,7 @@ test "Set Api" {
         \\  assert(type(_c) == "number" and _c == 1.1);
         \\  assert(type(_d) == "number" and _d == 2);
         \\  assert(type(_e) == "string" and _e == "Api");
+        \\  assert(type(_f) == "string" and _f == string.char(65, 0, 66) and _f ~= "AB" and #_f == 3);
         \\  assert(type(_pos) == "vector" and _pos.X == 1 and _pos.Y == 2 and _pos.Z == 3);
         \\  
         \\  assert(type(gl_a) == "function"); gl_a()
@@ -1073,6 +1079,7 @@ test "Set Api" {
         \\  assert(type(gl_c) == "number" and gl_c == 1.1);
         \\  assert(type(gl_d) == "number" and gl_d == 2);
         \\  assert(type(gl_e) == "string" and gl_e == "Api");
+        \\  assert(type(gl_f) == "string" and gl_f == string.char(65, 0, 66) and gl_f ~= "AB" and #gl_f == 3);
         \\  assert(type(gl_pos) == "vector" and gl_pos.X == 1 and gl_pos.Y == 2 and gl_pos.Z == 3);
         \\end
         \\
@@ -1102,6 +1109,7 @@ test "Set Api" {
     lua.setFieldNumber(-1, "c", 1.1);
     lua.setFieldInteger(-1, "d", 2);
     lua.setFieldString(-1, "e", "Api");
+    lua.setFieldLString(-1, "f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
         lua.setFieldVector(-1, "pos", 1.0, 2.0, 3.0, null);
     } else {
@@ -1113,6 +1121,7 @@ test "Set Api" {
     lua.setFieldNumber(luau.GLOBALSINDEX, "_c", 1.1);
     lua.setFieldInteger(luau.GLOBALSINDEX, "_d", 2);
     lua.setFieldString(luau.GLOBALSINDEX, "_e", "Api");
+    lua.setFieldLString(luau.GLOBALSINDEX, "_f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
         lua.setFieldVector(luau.GLOBALSINDEX, "_pos", 1.0, 2.0, 3.0, null);
     } else {
@@ -1124,6 +1133,7 @@ test "Set Api" {
     lua.setGlobalNumber("gl_c", 1.1);
     lua.setGlobalInteger("gl_d", 2);
     lua.setGlobalString("gl_e", "Api");
+    lua.setGlobalLString("gl_f", &[_]u8{ 'A', 0, 'B' });
     if (luau.VECTOR_SIZE == 3) {
         lua.setGlobalVector("gl_pos", 1.0, 2.0, 3.0, null);
     } else {
@@ -1135,7 +1145,7 @@ test "Set Api" {
 
     lua.pushValue(-2);
     lua.pcall(1, 1, 0) catch {
-        std.debug.panic("error: {s}\n", .{ try lua.toString(-1) });
+        std.debug.panic("error: {s}\n", .{try lua.toString(-1)});
     };
 
     _ = try lua.getGlobal("count");
@@ -1152,14 +1162,14 @@ test "Vectors" {
 
     const vectorFn = struct {
         fn inner(l: *Luau) i32 {
-            const x : f32 = @floatCast(l.optNumber(1) orelse 0.0);
-            const y : f32 = @floatCast(l.optNumber(2) orelse 0.0);
-            const z : f32 = @floatCast(l.optNumber(3) orelse 0.0);
-        
+            const x: f32 = @floatCast(l.optNumber(1) orelse 0.0);
+            const y: f32 = @floatCast(l.optNumber(2) orelse 0.0);
+            const z: f32 = @floatCast(l.optNumber(3) orelse 0.0);
+
             if (luau.VECTOR_SIZE == 3) {
                 l.pushVector(x, y, z, null);
             } else {
-                const w : f32 = @floatCast(l.optNumber(4) orelse 0.0);
+                const w: f32 = @floatCast(l.optNumber(4) orelse 0.0);
                 l.pushVector(x, y, z, w);
             }
 
@@ -1257,7 +1267,7 @@ test "Readonly table" {
     lua.setReadOnly(-1, true);
     lua.setGlobal("List");
 
-     const src =
+    const src =
         \\List[1] = "test"
     ;
     const bc = try luau.compile(testing.allocator, src, .{
