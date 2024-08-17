@@ -268,6 +268,10 @@ pub fn Parsed(comptime T: type) type {
     };
 }
 
+pub fn isNoneOrNil(t: LuaType) bool {
+    return t == .none or t == .nil;
+}
+
 pub const Metamethods = struct {
     pub const index = "__index";
     pub const newindex = "__newindex";
