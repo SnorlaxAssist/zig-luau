@@ -1328,7 +1328,10 @@ pub const Luau = struct {
     }
 
     pub fn loadBytecode(luau: *Luau, chunkname: [:0]const u8, bytecode: []const u8) !void {
-        if (c.luau_load(stateCast(luau), chunkname.ptr, bytecode.ptr, bytecode.len, 0) != 0) return error.Fail;
+        try luau.loadBytecodeEnv(chunkname, bytecode, 0);
+    }
+    pub fn loadBytecodeEnv(luau: *Luau, chunkname: [:0]const u8, bytecode: []const u8, envIdx: i32) !void {
+        if (c.luau_load(stateCast(luau), chunkname.ptr, bytecode.ptr, bytecode.len, envIdx) != 0) return error.Fail;
     }
 
     /// Pushes onto the stack the field `e` from the metatable of the object at index `obj`
