@@ -3,11 +3,16 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 640, .patch = 0 };
+const VERSION_HASH = "1220c823cc452e7ed2f3f595c4c27ca03ddde9a6eb41e8af45b6e5d922a6ce7356aa";
+
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
     b.top_level_steps = .{};
 
     const luau_dep = b.lazyDependency("luau", .{}) orelse unreachable;
+
+    std.debug.assert(std.mem.eql(u8, luau_dep.builder.pkg_hash, VERSION_HASH));
 
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -22,6 +27,7 @@ pub fn build(b: *Build) !void {
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);
+    config.addOption(std.SemanticVersion, "luau_version", LUAU_VERSION);
     luauModule.addOptions("config", config);
 
     const vector_size: usize = if (use_4_vector) 4 else 3;
@@ -101,7 +107,7 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = std.SemanticVersion{ .major = 0, .minor = 640, .patch = 0 },
+        .version = LUAU_VERSION,
     });
 
     for (LUAU_Ast_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));

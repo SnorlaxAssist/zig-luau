@@ -13,6 +13,8 @@ const config = @import("config");
 /// The length of Luau vector values, either 3 or 4.
 pub const VECTOR_SIZE = if (config.use_4_vector) 4 else 3;
 
+pub const LUAU_VERSION = config.luau_version;
+
 /// This function is defined in luau.cpp and must be called to define the assertion printer
 extern "c" fn zig_registerAssertionHandler() void;
 
