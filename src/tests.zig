@@ -1321,3 +1321,68 @@ test "Metamethods" {
     try expectEqualStrings("MyMetatable", try lua.toString(-1));
     lua.pop(1);
 }
+
+test "Zig Error Fn Lua Handled" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    const zigEFn = struct {
+        fn inner(_: *Luau) !i32 {
+            return error.Fail;
+        }
+    }.inner;
+
+    lua.pushFunction(zigEFn, "zigEFn");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
+    try expectEqualStrings("Fail", try lua.toString(-1));
+}
+
+test "getFieldObject" {
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    lua.openLibs();
+
+    lua.newTable();
+    lua.setFieldBoolean(-1, "test", true);
+    lua.setGlobalLString("some", "Value");
+
+    switch (try lua.getFieldObj(-1, "test")) {
+        .boolean => |b| try expectEqual(true, b),
+        else => @panic("Failed"),
+    }
+
+    switch (try lua.getGlobalObj("some")) {
+        .string => |s| try expectEqualStrings("Value", s),
+        else => @panic("Failed"),
+    }
+
+    _ = try lua.newBuffer(2);
+    lua.pushNil();
+    switch (try lua.typeOfObj(-2)) {
+        .buffer => |buf| try expectEqualStrings(&[_]u8{ 0, 0 }, buf),
+        else => @panic("Failed"),
+    }
+    lua.pop(1);
+
+    switch (try lua.typeOfObj(-1)) {
+        .nil => {},
+        else => @panic("Failed"),
+    }
+    try expectEqual(.nil, lua.typeOf(-1)); // should not be consumed
+    try expectEqual(.nil, lua.typeOf(-2)); // should not be consumed
+    try expectEqual(.buffer, lua.typeOf(-3));
+    lua.pop(2);
+
+    lua.pushNumber(1.2);
+    switch (try lua.typeOfObj(-1)) {
+        .number => {
+            // can leak if not handled, stack grows
+        },
+        else => @panic("Failed"),
+    }
+    try expectEqual(.number, lua.typeOf(-1)); // should not be consumed
+    try expectEqual(.number, lua.typeOf(-2)); // should not be consumed
+    try expectEqual(.buffer, lua.typeOf(-3));
+    lua.pop(2);
+}

@@ -45,6 +45,7 @@ pub const AllocFn = *const fn (data: ?*anyopaque, ptr: ?*anyopaque, osize: usize
 /// Type for C functions
 pub const CFn = *const fn (state: ?*LuaState) callconv(.C) c_int;
 pub const ZigFn = *const fn (state: *Luau) i32;
+pub const ZigEFn = *const fn (state: *Luau) anyerror!i32;
 
 /// Type for C userdata destructors
 pub const CUserdataDtorFn = *const fn (userdata: *anyopaque) callconv(.C) void;
@@ -171,6 +172,28 @@ pub const LuaType = enum(i5) {
     userdata = c.LUA_TUSERDATA,
     thread = c.LUA_TTHREAD,
     buffer = c.LUA_TBUFFER,
+};
+
+pub const LuaObject = union(LuaType) {
+    none: void,
+    nil: void,
+
+    boolean: bool,
+    light_userdata: *anyopaque,
+
+    number: Number,
+
+    vector: []const f32,
+    string: []const u8,
+
+    table: void,
+    function: void,
+
+    userdata: *anyopaque,
+
+    thread: void,
+
+    buffer: []u8,
 };
 
 /// Modes used for `Luau.load()`
@@ -492,7 +515,7 @@ pub const Luau = struct {
     pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn (ptr: *T) void) *T {
         const dtorCfn = struct {
             fn inner(ptr: ?*anyopaque) callconv(.C) void {
-                if (ptr) |p| @call(.always_inline, dtorfn, .{@as(*T, @ptrCast(@alignCast(p)))});
+                if (ptr) |p| @call(.always_inline, dtorfn, .{opaqueCast(T, p)});
             }
         }.inner;
         // safe to .? because this function throws a Lua error on out of memory
@@ -539,11 +562,53 @@ pub const Luau = struct {
         return @enumFromInt(c.lua_getfield(stateCast(luau), index, key.ptr));
     }
 
+    fn toLuaObject(luau: *Luau, t: LuaType) !LuaObject {
+        switch (t) {
+            .none => return .{
+                .none = @as(void, undefined),
+            },
+            .nil => return .{
+                .nil = @as(void, undefined),
+            },
+            .boolean => return .{
+                .boolean = luau.toBoolean(-1),
+            },
+            .light_userdata => return .{
+                .light_userdata = try luau.toUserdata(anyopaque, -1),
+            },
+            .number => return .{ .number = try luau.toNumber(-1) },
+            .vector => return .{
+                .vector = try luau.toVector(-1),
+            },
+            .string => return .{
+                .string = try luau.toString(-1),
+            },
+            .table => return .{ .table = @as(void, undefined) },
+            .function => return .{ .function = @as(void, undefined) },
+            .userdata => return .{
+                .userdata = try luau.toUserdata(anyopaque, -1),
+            },
+            .thread => return .{ .thread = @as(void, undefined) },
+            .buffer => return .{
+                .buffer = try luau.toBuffer(-1),
+            },
+        }
+        @panic("Unhandled object cases");
+    }
+
+    pub fn getFieldObj(luau: *Luau, index: i32, key: [:0]const u8) !LuaObject {
+        return try luau.toLuaObject(luau.getField(index, key));
+    }
+
     /// Pushes onto the stack the value of the global name
     pub fn getGlobal(luau: *Luau, name: [:0]const u8) !LuaType {
         const lua_type: LuaType = @enumFromInt(c.lua_getglobal(stateCast(luau), name.ptr));
         if (lua_type == .nil) return error.Fail;
         return lua_type;
+    }
+
+    pub fn getGlobalObj(luau: *Luau, key: [:0]const u8) !LuaObject {
+        return try luau.toLuaObject(try luau.getGlobal(key));
     }
 
     /// If the value at the given index has a metatable, the function pushes that metatable onto the stack, returning true
@@ -735,8 +800,37 @@ pub const Luau = struct {
 
     /// Pushes a function onto the stack.
     /// Equivalent to pushClosure with no upvalues
-    pub fn pushFunction(luau: *Luau, comptime zig_fn: ZigFn, name: [:0]const u8) void {
-        luau.pushClosure(toCFn(zig_fn), name, 0);
+    fn pushZigFunction(luau: *Luau, comptime fnType: std.builtin.Type.Fn, comptime zig_fn: anytype, name: [:0]const u8) void {
+        const ri = @typeInfo(fnType.return_type orelse @compileError("Fn must return something"));
+        switch (ri) {
+            .Int => |_| {
+                luau.pushClosure(toCFn(@as(ZigFn, zig_fn)), name, 0);
+                return;
+            },
+            .ErrorUnion => |_| {
+                luau.pushClosure(EFntoZigFn(@as(ZigEFn, zig_fn)), name, 0);
+                return;
+            },
+            else => {},
+        }
+        @compileError("Unsupported Fn Return type");
+    }
+    pub fn pushFunction(luau: *Luau, comptime zig_fn: anytype, name: [:0]const u8) void {
+        const t = @TypeOf(zig_fn);
+        const ti = @typeInfo(t);
+        switch (ti) {
+            .Fn => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
+            .Pointer => |ptr| {
+                if (!ptr.is_const) @compileError("Pointer must be constant");
+                const pi = @typeInfo(ptr.child);
+                switch (pi) {
+                    .Fn => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
+                    else => @compileError("Pointer must be a pointer to a function"),
+                }
+            },
+            else => @compileError("zig_fn must be a Fn or a Fn Pointer"),
+        }
+        @compileError("Could not determine zig_fn type");
     }
     pub fn pushCFunction(luau: *Luau, c_fn: CFn, name: [:0]const u8) void {
         luau.pushClosure(c_fn, name, 0);
@@ -894,6 +988,10 @@ pub const Luau = struct {
         luau.setField(idx, k);
     }
 
+    pub fn setFieldNil(luau: *Luau, comptime index: i32, k: [:0]const u8) void {
+        luau.pushNil();
+        luau.setFieldAhead(index, k);
+    }
     pub fn setFieldFn(luau: *Luau, comptime index: i32, k: [:0]const u8, comptime zig_fn: ZigFn) void {
         luau.pushFunction(zig_fn, k);
         luau.setFieldAhead(index, k);
@@ -927,6 +1025,10 @@ pub const Luau = struct {
         luau.setFieldAhead(index, k);
     }
 
+    pub fn setGlobalNil(luau: *Luau, name: [:0]const u8) void {
+        luau.pushNil();
+        luau.setGlobal(name);
+    }
     pub fn setGlobalFn(luau: *Luau, name: [:0]const u8, comptime zig_fn: ZigFn) void {
         luau.pushFunction(zig_fn, name);
         luau.setGlobal(name);
@@ -1085,6 +1187,11 @@ pub const Luau = struct {
     pub fn toVector(luau: *Luau, index: i32) ![]const f32 {
         if (c.lua_tovector(stateCast(luau), index)) |ptr| return @as([*]const f32, @ptrCast(@alignCast(ptr)))[0..VECTOR_SIZE];
         return error.Fail;
+    }
+
+    pub fn typeOfObj(luau: *Luau, index: i32) !LuaObject {
+        luau.pushValue(index);
+        return try luau.toLuaObject(luau.typeOf(-1));
     }
 
     /// Returns the `LuaType` of the value at the given index
@@ -1705,6 +1812,15 @@ pub fn toCFn(comptime f: ZigFn) CFn {
             return @call(.always_inline, f, .{@as(*Luau, @ptrCast(state.?))});
         }
     }.inner;
+}
+
+pub fn EFntoZigFn(comptime f: ZigEFn) CFn {
+    return toCFn(struct {
+        fn inner(state: *Luau) i32 {
+            // this is called by Luau, state should never be null
+            if (@call(.always_inline, f, .{state})) |res| return res else |err| state.raiseErrorStr("%s", .{@errorName(err).ptr});
+        }
+    }.inner);
 }
 
 /// Wrap a ZigHookFn in a CHookFn for passing to the API
