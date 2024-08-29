@@ -929,7 +929,7 @@ pub const Luau = struct {
     }
 
     /// Sets the C function f as the new value of global name
-    pub fn register(luau: *Luau, name: [:0]const u8, comptime zig_fn: ZigFn) void {
+    pub fn register(luau: *Luau, name: [:0]const u8, comptime zig_fn: anytype) void {
         // translate-c failure
         luau.pushFunction(zig_fn, name);
         luau.setGlobal(name);
@@ -994,7 +994,7 @@ pub const Luau = struct {
         luau.pushNil();
         luau.setFieldAhead(index, k);
     }
-    pub fn setFieldFn(luau: *Luau, comptime index: i32, k: [:0]const u8, comptime zig_fn: ZigFn) void {
+    pub fn setFieldFn(luau: *Luau, comptime index: i32, k: [:0]const u8, comptime zig_fn: anytype) void {
         luau.pushFunction(zig_fn, k);
         luau.setFieldAhead(index, k);
     }
@@ -1031,7 +1031,7 @@ pub const Luau = struct {
         luau.pushNil();
         luau.setGlobal(name);
     }
-    pub fn setGlobalFn(luau: *Luau, name: [:0]const u8, comptime zig_fn: ZigFn) void {
+    pub fn setGlobalFn(luau: *Luau, name: [:0]const u8, comptime zig_fn: anytype) void {
         luau.pushFunction(zig_fn, name);
         luau.setGlobal(name);
     }
@@ -1615,7 +1615,7 @@ pub const Luau = struct {
         if (libs.buffer) luau.requireF(c.LUA_BUFFERLIBNAME, c.luaopen_buffer);
     }
 
-    fn requireF(luau: *Luau, name: [:0]const u8, func: ZigFn) void {
+    fn requireF(luau: *Luau, name: [:0]const u8, comptime func: anytype) void {
         luau.pushFunction(func, name);
         luau.pushString(name);
         luau.call(1, 0);
