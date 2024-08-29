@@ -42,6 +42,15 @@ pub fn build(b: *Build) !void {
 
     luauModule.linkLibrary(lib);
 
+    const luauAnalysisModule = b.addModule("zig-luau-analysis", .{
+        .root_source_file = b.path("src/parser.zig"),
+    });
+
+    const lib_analysis = try buildLuauAnalysis(b, target, luau_dep, optimize);
+    b.installArtifact(lib_analysis);
+
+    luauAnalysisModule.linkLibrary(lib_analysis);
+
     // Tests
     const tests = b.addTest(.{
         .root_source_file = b.path("src/tests.zig"),
@@ -51,8 +60,19 @@ pub fn build(b: *Build) !void {
     tests.root_module.addImport("luau", luauModule);
 
     const run_tests = b.addRunArtifact(tests);
+
+    const analysis_tests = b.addTest(.{
+        .root_source_file = b.path("src/parser-tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    analysis_tests.root_module.addImport("luau_analysis", luauAnalysisModule);
+
+    const run_analysis_tests = b.addRunArtifact(analysis_tests);
+
     const test_step = b.step("test", "Run zigluau tests");
     test_step.dependOn(&run_tests.step);
+    test_step.dependOn(&run_analysis_tests.step);
 
     // Examples
     const examples = [_]struct { []const u8, []const u8 }{
@@ -145,6 +165,99 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
     return lib;
 }
 
+fn buildLuauAnalysis(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Dependency, optimize: std.builtin.OptimizeMode) !*Step.Compile {
+    const lib = b.addStaticLibrary(.{
+        .name = "luau_analysis",
+        .target = target,
+        .optimize = optimize,
+        .version = LUAU_VERSION,
+    });
+
+    for (LUAU_Analysis_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Ast_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_EqSat_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Common_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Config_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+
+    const FLAGS = [_][]const u8{};
+
+    lib.linkLibCpp();
+
+    for (LUAU_Analysis_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_Ast_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_EqSat_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_Config_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+
+    lib.addCSourceFile(.{ .file = b.path("src/parser.cpp"), .flags = &FLAGS });
+
+    return lib;
+}
+
+const LUAU_Analysis_HEADERS_DIRS = [_][]const u8{
+    "Analysis/include/",
+};
+const LUAU_Analysis_SOURCE_FILES = [_][]const u8{
+    "Analysis/src/Anyification.cpp",
+    "Analysis/src/AnyTypeSummary.cpp",
+    "Analysis/src/ApplyTypeFunction.cpp",
+    "Analysis/src/AstJsonEncoder.cpp",
+    "Analysis/src/AstQuery.cpp",
+    "Analysis/src/Autocomplete.cpp",
+    "Analysis/src/BuiltinDefinitions.cpp",
+    "Analysis/src/Clone.cpp",
+    "Analysis/src/Constraint.cpp",
+    "Analysis/src/ConstraintGenerator.cpp",
+    "Analysis/src/ConstraintSolver.cpp",
+    "Analysis/src/DataFlowGraph.cpp",
+    "Analysis/src/DcrLogger.cpp",
+    "Analysis/src/Def.cpp",
+    "Analysis/src/Differ.cpp",
+    "Analysis/src/EmbeddedBuiltinDefinitions.cpp",
+    "Analysis/src/Error.cpp",
+    "Analysis/src/Frontend.cpp",
+    "Analysis/src/Generalization.cpp",
+    "Analysis/src/GlobalTypes.cpp",
+    "Analysis/src/Instantiation.cpp",
+    "Analysis/src/Instantiation2.cpp",
+    "Analysis/src/IostreamHelpers.cpp",
+    "Analysis/src/JsonEmitter.cpp",
+    "Analysis/src/Linter.cpp",
+    "Analysis/src/LValue.cpp",
+    "Analysis/src/Module.cpp",
+    "Analysis/src/NonStrictTypeChecker.cpp",
+    "Analysis/src/Normalize.cpp",
+    "Analysis/src/OverloadResolution.cpp",
+    "Analysis/src/Quantify.cpp",
+    "Analysis/src/Refinement.cpp",
+    "Analysis/src/RequireTracer.cpp",
+    "Analysis/src/Scope.cpp",
+    "Analysis/src/Simplify.cpp",
+    "Analysis/src/Substitution.cpp",
+    "Analysis/src/Subtyping.cpp",
+    "Analysis/src/Symbol.cpp",
+    "Analysis/src/TableLiteralInference.cpp",
+    "Analysis/src/ToDot.cpp",
+    "Analysis/src/TopoSortStatements.cpp",
+    "Analysis/src/ToString.cpp",
+    "Analysis/src/Transpiler.cpp",
+    "Analysis/src/TxnLog.cpp",
+    "Analysis/src/Type.cpp",
+    "Analysis/src/TypeArena.cpp",
+    "Analysis/src/TypeAttach.cpp",
+    "Analysis/src/TypeChecker2.cpp",
+    "Analysis/src/TypedAllocator.cpp",
+    "Analysis/src/TypeFunction.cpp",
+    "Analysis/src/TypeFunctionReductionGuesser.cpp",
+    "Analysis/src/TypeInfer.cpp",
+    "Analysis/src/TypeOrPack.cpp",
+    "Analysis/src/TypePack.cpp",
+    "Analysis/src/TypePath.cpp",
+    "Analysis/src/TypeUtils.cpp",
+    "Analysis/src/Unifiable.cpp",
+    "Analysis/src/Unifier.cpp",
+    "Analysis/src/Unifier2.cpp",
+};
+
 const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
     "Ast/include/",
 };
@@ -220,6 +333,22 @@ const LUAU_CodeGen_SOURCE_FILES = [_][]const u8{
     "CodeGen/src/BytecodeAnalysis.cpp",
     "CodeGen/src/BytecodeSummary.cpp",
     "CodeGen/src/SharedCodeAllocator.cpp",
+};
+
+const LUAU_Config_HEADERS_DIRS = [_][]const u8{
+    "Config/include/",
+};
+const LUAU_Config_SOURCE_FILES = [_][]const u8{
+    "Config/src/Config.cpp",
+    "Config/src/LinterConfig.cpp",
+};
+
+const LUAU_EqSat_HEADERS_DIRS = [_][]const u8{
+    "EqSat/include/",
+};
+const LUAU_EqSat_SOURCE_FILES = [_][]const u8{
+    "EqSat/src/Id.cpp",
+    "EqSat/src/UnionFind.cpp",
 };
 
 const LUAU_VM_HEADERS_DIRS = [_][]const u8{
