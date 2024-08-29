@@ -1,11 +1,12 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const c = @cImport({
     @cInclude("lua.h");
     @cInclude("lualib.h");
 
     @cInclude("luacode.h");
-    @cInclude("luacodegen.h");
+    if (!builtin.cpu.arch.isWasm()) @cInclude("luacodegen.h");
 });
 
 const config = @import("config");
@@ -334,17 +335,25 @@ pub const State = struct {
 
 const stateCast = State.LuauToState;
 
-pub const CodeGen = struct {
+pub const CodeGen = if (!builtin.cpu.arch.isWasm()) struct {
     pub fn Supported() bool {
         return c.luau_codegen_supported() == 1;
     }
-
     pub fn Create(luau: *Luau) void {
         c.luau_codegen_create(stateCast(luau));
     }
-
     pub fn Compile(luau: *Luau, idx: i32) void {
         c.luau_codegen_compile(stateCast(luau), @intCast(idx));
+    }
+} else struct {
+    pub fn Supported() bool {
+        return false;
+    }
+    pub fn Create(_: *Luau) void {
+        @panic("CodeGen is not supported on wasm");
+    }
+    pub fn Compile(_: *Luau, _: i32) void {
+        @panic("CodeGen is not supported on wasm");
     }
 };
 
@@ -566,51 +575,45 @@ pub const Luau = struct {
 
     fn toLuaObject(luau: *Luau, t: LuaType) !LuaObject {
         switch (t) {
-            .none => return .{
-                .none = @as(void, undefined),
-            },
-            .nil => return .{
-                .nil = @as(void, undefined),
-            },
-            .boolean => return .{
-                .boolean = luau.toBoolean(-1),
-            },
-            .light_userdata => return .{
-                .light_userdata = try luau.toUserdata(anyopaque, -1),
-            },
+            .none => return .{ .none = @as(void, undefined) },
+            .nil => return .{ .nil = @as(void, undefined) },
+            .boolean => return .{ .boolean = luau.toBoolean(-1) },
+            .light_userdata => return .{ .light_userdata = try luau.toUserdata(anyopaque, -1) },
             .number => return .{ .number = try luau.toNumber(-1) },
-            .vector => return .{
-                .vector = try luau.toVector(-1),
-            },
-            .string => return .{
-                .string = try luau.toString(-1),
-            },
+            .vector => return .{ .vector = try luau.toVector(-1) },
+            .string => return .{ .string = try luau.toString(-1) },
             .table => return .{ .table = @as(void, undefined) },
             .function => return .{ .function = @as(void, undefined) },
-            .userdata => return .{
-                .userdata = try luau.toUserdata(anyopaque, -1),
-            },
+            .userdata => return .{ .userdata = try luau.toUserdata(anyopaque, -1) },
             .thread => return .{ .thread = @as(void, undefined) },
-            .buffer => return .{
-                .buffer = try luau.toBuffer(-1),
-            },
+            .buffer => return .{ .buffer = try luau.toBuffer(-1) },
         }
         @panic("Unhandled object cases");
     }
 
     pub fn getFieldObj(luau: *Luau, index: i32, key: [:0]const u8) !LuaObject {
+        errdefer luau.pop(1);
+        return try luau.toLuaObject(luau.getField(index, key));
+    }
+
+    pub fn getFieldObjConsumed(luau: *Luau, index: i32, key: [:0]const u8) !LuaObject {
+        defer luau.pop(1);
         return try luau.toLuaObject(luau.getField(index, key));
     }
 
     /// Pushes onto the stack the value of the global name
-    pub fn getGlobal(luau: *Luau, name: [:0]const u8) !LuaType {
-        const lua_type: LuaType = @enumFromInt(c.lua_getglobal(stateCast(luau), name.ptr));
-        if (lua_type == .nil) return error.Fail;
-        return lua_type;
+    pub fn getGlobal(luau: *Luau, name: [:0]const u8) LuaType {
+        return luau.getField(GLOBALSINDEX, name);
     }
 
     pub fn getGlobalObj(luau: *Luau, key: [:0]const u8) !LuaObject {
-        return try luau.toLuaObject(try luau.getGlobal(key));
+        errdefer luau.pop(1);
+        return try luau.toLuaObject(luau.getGlobal(key));
+    }
+
+    pub fn getGlobalObjConsumed(luau: *Luau, key: [:0]const u8) !LuaObject {
+        defer luau.pop(1);
+        return try luau.toLuaObject(luau.getGlobal(key));
     }
 
     /// If the value at the given index has a metatable, the function pushes that metatable onto the stack, returning true
@@ -805,14 +808,8 @@ pub const Luau = struct {
     fn pushZigFunction(luau: *Luau, comptime fnType: std.builtin.Type.Fn, comptime zig_fn: anytype, name: [:0]const u8) void {
         const ri = @typeInfo(fnType.return_type orelse @compileError("Fn must return something"));
         switch (ri) {
-            .Int => |_| {
-                luau.pushClosure(toCFn(@as(ZigFn, zig_fn)), name, 0);
-                return;
-            },
-            .ErrorUnion => |_| {
-                luau.pushClosure(EFntoZigFn(@as(ZigEFn, zig_fn)), name, 0);
-                return;
-            },
+            .Int => |_| return luau.pushClosure(toCFn(@as(ZigFn, zig_fn)), name, 0),
+            .ErrorUnion => |_| return luau.pushClosure(EFntoZigFn(@as(ZigEFn, zig_fn)), name, 0),
             else => {},
         }
         @compileError("Unsupported Fn Return type");
@@ -823,6 +820,7 @@ pub const Luau = struct {
         switch (ti) {
             .Fn => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
             .Pointer => |ptr| {
+                // *const fn ...
                 if (!ptr.is_const) @compileError("Pointer must be constant");
                 const pi = @typeInfo(ptr.child);
                 switch (pi) {
@@ -1193,6 +1191,13 @@ pub const Luau = struct {
 
     pub fn typeOfObj(luau: *Luau, index: i32) !LuaObject {
         luau.pushValue(index);
+        errdefer luau.pop(1);
+        return try luau.toLuaObject(luau.typeOf(-1));
+    }
+
+    pub fn typeOfObjConsumed(luau: *Luau, index: i32) !LuaObject {
+        luau.pushValue(index);
+        defer luau.pop(1);
         return try luau.toLuaObject(luau.typeOf(-1));
     }
 

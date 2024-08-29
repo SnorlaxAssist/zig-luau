@@ -344,7 +344,7 @@ test "calling a function" {
 
     lua.register("zigadd", add);
 
-    _ = try lua.getGlobal("zigadd");
+    _ = lua.getGlobal("zigadd");
     lua.pushInteger(10);
     lua.pushInteger(32);
 
@@ -428,7 +428,7 @@ test "function registration" {
     lua.registerFns("testlib", &funcs);
 
     // testlib.add(1, 2)
-    _ = try lua.getGlobal("testlib");
+    _ = lua.getGlobal("testlib");
     _ = lua.getField(-1, "add");
     lua.pushInteger(1);
     lua.pushInteger(2);
@@ -581,7 +581,7 @@ test "upvalues" {
     // call the function repeatedly, each time ensuring the result increases by one
     var expected: i32 = 1;
     while (expected <= 10) : (expected += 1) {
-        _ = try lua.getGlobal("counter");
+        _ = lua.getGlobal("counter");
         lua.call(0, 1);
         try expectEqual(expected, try lua.toInteger(-1));
         lua.pop(1);
@@ -1097,7 +1097,7 @@ test "Set Api" {
 
     const tempFn = struct {
         fn inner(l: *Luau) i32 {
-            _ = l.getGlobal("count") catch luau.LuaType.nil;
+            _ = l.getGlobal("count");
             l.pushInteger((l.toInteger(-1) catch 0) + 1);
             l.setGlobal("count");
             return 0;
@@ -1148,7 +1148,7 @@ test "Set Api" {
         std.debug.panic("error: {s}\n", .{try lua.toString(-1)});
     };
 
-    _ = try lua.getGlobal("count");
+    _ = lua.getGlobal("count");
     try expectEqual(3, try lua.toInteger(-1));
 }
 
@@ -1315,7 +1315,7 @@ test "Metamethods" {
     try expectEqualStrings("Hello, world", try lua.toString(-1));
     lua.pop(1);
 
-    try expectEqual(.function, try lua.getGlobal("tostring"));
+    try expectEqual(.function, lua.getGlobal("tostring"));
     lua.pushValue(-2);
     try lua.pcall(1, 1, 0);
     try expectEqualStrings("MyMetatable", try lua.toString(-1));
@@ -1376,13 +1376,31 @@ test "getFieldObject" {
 
     lua.pushNumber(1.2);
     switch (try lua.typeOfObj(-1)) {
-        .number => {
+        .number => |n| {
             // can leak if not handled, stack grows
+            try expectEqual(1.2, n);
         },
         else => @panic("Failed"),
     }
     try expectEqual(.number, lua.typeOf(-1)); // should not be consumed
     try expectEqual(.number, lua.typeOf(-2)); // should not be consumed
     try expectEqual(.buffer, lua.typeOf(-3));
+
+    switch (try lua.typeOfObjConsumed(-1)) {
+        .number => |n| {
+            // pops automatically with value
+            try expectEqual(1.2, n);
+        },
+        else => @panic("Failed"),
+    }
+    // should be consumed
+    try expectEqual(.number, lua.typeOf(-1)); // should not be consumed
+    try expectEqual(.number, lua.typeOf(-2)); // should not be consumed
+    try expectEqual(.buffer, lua.typeOf(-3));
     lua.pop(2);
+
+    const res = try lua.typeOfObj(-1);
+    if (res == .buffer) {
+        try expectEqualStrings(&[_]u8{ 0, 0 }, res.buffer);
+    } else @panic("Failed");
 }
