@@ -32,7 +32,7 @@ pub fn build(b: *Build) !void {
 
     luauModule.addIncludePath(luau_dep.path("Compiler/include"));
     luauModule.addIncludePath(luau_dep.path("VM/include"));
-    luauModule.addIncludePath(luau_dep.path("CodeGen/include"));
+    if (!target.result.isWasm()) luauModule.addIncludePath(luau_dep.path("CodeGen/include"));
 
     luauModule.linkLibrary(lib);
 
@@ -101,15 +101,19 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
         .name = "luau",
         .target = target,
         .optimize = optimize,
-        .version = std.SemanticVersion{ .major = 0, .minor = 638, .patch = 0 },
+        .version = std.SemanticVersion{ .major = 0, .minor = 640, .patch = 0 },
     });
 
-    for (LUAU_HEADER_DIRS) |dir| {
-        lib.addIncludePath(dependency.path(dir));
-    }
+    for (LUAU_Ast_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Common_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Compiler_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    // CodeGen is not supported on WASM
+    if (!target.result.isWasm()) for (LUAU_CodeGen_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_VM_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
 
     const FLAGS = [_][]const u8{
-        "-DLUA_USE_LONGJMP=1",
+        // setjmp.h compile error in Wasm
+        "-DLUA_USE_LONGJMP=" ++ if (!target.result.isWasm()) "1" else "0",
         "-DLUA_API=extern\"C\"",
         "-DLUACODE_API=extern\"C\"",
         "-DLUACODEGEN_API=extern\"C\"",
@@ -117,33 +121,46 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
     };
 
     lib.linkLibCpp();
-    for (LUAU_SOURCE_FILES) |file| {
-        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
-    }
+
+    for (LUAU_Ast_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_Compiler_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    // CodeGen is not supported on WASM
+    if (!target.result.isWasm()) for (LUAU_CodeGen_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_VM_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+
     lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = &FLAGS });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
     lib.installHeader(dependency.path("VM/include/lualib.h"), "lualib.h");
     lib.installHeader(dependency.path("VM/include/luaconf.h"), "luaconf.h");
-    lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
+    if (!target.result.isWasm()) lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
 
     return lib;
 }
 
-const LUAU_HEADER_DIRS = [_][]const u8{
-    "Common/include/",
+const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
     "Ast/include/",
-    "Compiler/include/",
-    "Compiler/src/",
-    "CodeGen/include/",
-    "CodeGen/src/",
-    "VM/include/",
-    "VM/src/",
+};
+const LUAU_Ast_SOURCE_FILES = [_][]const u8{
+    "Ast/src/Ast.cpp",
+    "Ast/src/Confusables.cpp",
+    "Ast/src/Lexer.cpp",
+    "Ast/src/Location.cpp",
+    "Ast/src/Parser.cpp",
+    "Ast/src/StringUtils.cpp",
+    "Ast/src/TimeTrace.cpp",
 };
 
-const LUAU_SOURCE_FILES = [_][]const u8{
-    // Compiler
+const LUAU_Common_HEADERS_DIRS = [_][]const u8{
+    "Common/include/",
+};
+
+const LUAU_Compiler_HEADERS_DIRS = [_][]const u8{
+    "Compiler/include/",
+    "Compiler/src/",
+};
+const LUAU_Compiler_SOURCE_FILES = [_][]const u8{
     "Compiler/src/BuiltinFolding.cpp",
     "Compiler/src/Builtins.cpp",
     "Compiler/src/BytecodeBuilder.cpp",
@@ -154,8 +171,13 @@ const LUAU_SOURCE_FILES = [_][]const u8{
     "Compiler/src/Types.cpp",
     "Compiler/src/ValueTracking.cpp",
     "Compiler/src/lcode.cpp",
+};
 
-    // CodeGen
+const LUAU_CodeGen_HEADERS_DIRS = [_][]const u8{
+    "CodeGen/include/",
+    "CodeGen/src/",
+};
+const LUAU_CodeGen_SOURCE_FILES = [_][]const u8{
     "CodeGen/src/AssemblyBuilderA64.cpp",
     "CodeGen/src/AssemblyBuilderX64.cpp",
     "CodeGen/src/CodeAllocator.cpp",
@@ -192,8 +214,14 @@ const LUAU_SOURCE_FILES = [_][]const u8{
     "CodeGen/src/BytecodeAnalysis.cpp",
     "CodeGen/src/BytecodeSummary.cpp",
     "CodeGen/src/SharedCodeAllocator.cpp",
+};
 
-    // VM
+const LUAU_VM_HEADERS_DIRS = [_][]const u8{
+    "VM/include/",
+    "VM/src/",
+};
+
+const LUAU_VM_SOURCE_FILES = [_][]const u8{
     "VM/src/lapi.cpp",
     "VM/src/laux.cpp",
     "VM/src/lbaselib.cpp",
@@ -226,13 +254,4 @@ const LUAU_SOURCE_FILES = [_][]const u8{
     "VM/src/lvmexecute.cpp",
     "VM/src/lvmload.cpp",
     "VM/src/lvmutils.cpp",
-
-    // Ast
-    "Ast/src/Ast.cpp",
-    "Ast/src/Confusables.cpp",
-    "Ast/src/Lexer.cpp",
-    "Ast/src/Location.cpp",
-    "Ast/src/Parser.cpp",
-    "Ast/src/StringUtils.cpp",
-    "Ast/src/TimeTrace.cpp",
 };
