@@ -1,5 +1,5 @@
 .{
-    .name = "zigluau",
+    .name = "zig-luau",
     .version = "0.2.3",
     .dependencies = .{
         .luau = .{
