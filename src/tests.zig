@@ -991,6 +991,7 @@ test "buffers" {
     lua.openBuffer();
 
     const buf = try lua.newBuffer(12);
+    try lua.pushBuffer("Hello, world 2");
 
     try expectEqual(12, buf.len);
 
@@ -998,11 +999,13 @@ test "buffers" {
 
     try expect(lua.isBuffer(-1));
     try expectEqualStrings("Hello, world", buf);
-    try expectEqualStrings("Hello, world", try lua.toBuffer(-1));
+    try expectEqualStrings("Hello, world", try lua.toBuffer(-2));
+    try expectEqualStrings("Hello, world 2", try lua.toBuffer(-1));
 
     const src =
-        \\function MyFunction(buf)
+        \\function MyFunction(buf, buf2)
         \\  assert(buffer.tostring(buf) == "Hello, world")
+        \\  assert(buffer.tostring(buf2) == "Hello, world 2")
         \\  local newBuf = buffer.create(4);
         \\  buffer.writeu8(newBuf, 0, 82)
         \\  buffer.writeu8(newBuf, 1, 101)
@@ -1023,8 +1026,9 @@ test "buffers" {
     try lua.loadBytecode("module", bc);
     try lua.pcall(0, 1, 0); // CALL main()
 
-    lua.pushValue(-2);
-    try lua.pcall(1, 1, 0); // CALL MyFunction(buf)
+    lua.pushValue(-3);
+    lua.pushValue(-3);
+    try lua.pcall(2, 1, 0); // CALL MyFunction(buf)
 
     const newBuf = lua.checkBuffer(-1);
     try expectEqual(4, newBuf.len);

@@ -852,6 +852,12 @@ pub const Luau = struct {
         c.lua_pushlstring(stateCast(luau), bytes.ptr, bytes.len);
     }
 
+    /// Pushes the bytes onto the stack as buffer
+    pub fn pushBuffer(luau: *Luau, bytes: []const u8) !void {
+        const buf = try luau.newBuffer(bytes.len);
+        @memcpy(buf, bytes);
+    }
+
     /// Pushes an integer with value `n` onto the stack
     pub fn pushInteger(luau: *Luau, n: Integer) void {
         c.lua_pushinteger(stateCast(luau), n);
