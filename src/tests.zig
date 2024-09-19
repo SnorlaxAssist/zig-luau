@@ -1408,3 +1408,33 @@ test "getFieldObject" {
         try expectEqualStrings(&[_]u8{ 0, 0 }, res.buffer);
     } else @panic("Failed");
 }
+
+test "SetFlags" {
+    const allocator = testing.allocator;
+    try expectError(error.UnknownFlag, luau.Flags.setBoolean("someunknownflag", true));
+    try expectError(error.UnknownFlag, luau.Flags.setInteger("someunknownflag", 1));
+
+    try expectError(error.UnknownFlag, luau.Flags.getBoolean("someunknownflag"));
+    try expectError(error.UnknownFlag, luau.Flags.getInteger("someunknownflag"));
+
+    const flags = try luau.Flags.getFlags(allocator);
+    defer flags.deinit();
+    for (flags.flags) |flag| {
+        try expect(flag.name.len > 0);
+
+        switch (flag.type) {
+            .boolean => {
+                const current = try luau.Flags.getBoolean(flag.name);
+                try luau.Flags.setBoolean(flag.name, !current);
+                try expectEqual(!current, try luau.Flags.getBoolean(flag.name));
+                try luau.Flags.setBoolean(flag.name, current);
+            },
+            .integer => {
+                const current = try luau.Flags.getInteger(flag.name);
+                try luau.Flags.setInteger(flag.name, current - 1);
+                try expectEqual(current - 1, try luau.Flags.getInteger(flag.name));
+                try luau.Flags.setInteger(flag.name, current);
+            },
+        }
+    }
+}

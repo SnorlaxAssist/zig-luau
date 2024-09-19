@@ -16,11 +16,28 @@ pub const VECTOR_SIZE = if (config.use_4_vector) 4 else 3;
 
 pub const LUAU_VERSION = config.luau_version;
 
+const c_FlagGroup = extern struct {
+    names: [*c][*c]const u8,
+    types: [*c]c_int,
+};
+
 /// This function is defined in luau.cpp and must be called to define the assertion printer
 extern "c" fn zig_registerAssertionHandler() void;
 
 /// This function is defined in luau.cpp and ensures Zig uses the correct free when compiling luau code
 extern "c" fn zig_luau_free(ptr: *anyopaque) void;
+
+extern "c" fn zig_luau_freeflags(c_FlagGroup) void;
+
+extern "c" fn zig_luau_setflag_bool([*]const u8, usize, bool) bool;
+
+extern "c" fn zig_luau_setflag_int([*]const u8, usize, c_int) bool;
+
+extern "c" fn zig_luau_getflag_bool([*]const u8, usize, *bool) bool;
+
+extern "c" fn zig_luau_getflag_int([*]const u8, usize, *c_int) bool;
+
+extern "c" fn zig_luau_getflags() c_FlagGroup;
 
 // NCG Workarounds - Minimal Debug Support for NCG
 /// Luau.CodeGen mock __register_frame for a workaround Luau NCG
@@ -297,6 +314,75 @@ pub fn Parsed(comptime T: type) type {
 pub fn isNoneOrNil(t: LuaType) bool {
     return t == .none or t == .nil;
 }
+
+pub const Flags = struct {
+    allocator: Allocator,
+    flags: []Flag,
+
+    pub const FlagType = enum {
+        boolean,
+        integer,
+    };
+
+    pub const Flag = struct {
+        name: []const u8,
+        type: FlagType,
+    };
+
+    pub fn setBoolean(name: []const u8, value: bool) !void {
+        if (!zig_luau_setflag_bool(name.ptr, name.len, value)) return error.UnknownFlag;
+    }
+
+    pub fn setInteger(name: []const u8, value: i32) !void {
+        if (!zig_luau_setflag_int(name.ptr, name.len, @intCast(value))) return error.UnknownFlag;
+    }
+
+    pub fn getBoolean(name: []const u8) !bool {
+        var value: bool = undefined;
+        if (!zig_luau_getflag_bool(name.ptr, name.len, &value)) return error.UnknownFlag;
+        return value;
+    }
+
+    pub fn getInteger(name: []const u8) !i32 {
+        var value: c_int = undefined;
+        if (!zig_luau_getflag_int(name.ptr, name.len, &value)) return error.UnknownFlag;
+        return @intCast(value);
+    }
+
+    pub fn getFlags(allocator: Allocator) !Flags {
+        const cflags = zig_luau_getflags();
+        defer zig_luau_freeflags(cflags);
+
+        var list = std.ArrayList(Flag).init(allocator);
+        defer list.deinit();
+        errdefer for (list.items) |flag| allocator.free(flag.name);
+
+        const names = cflags.names;
+
+        var i: usize = 0;
+        while (names[i] != null) : (i += 1) {
+            const name = try allocator.dupe(u8, std.mem.span(names[i]));
+            errdefer allocator.free(name);
+            const ttype: FlagType = @enumFromInt(cflags.types[i]);
+            try list.append(.{
+                .name = name,
+                .type = ttype,
+            });
+        }
+
+        return .{
+            .allocator = allocator,
+            .flags = try list.toOwnedSlice(),
+        };
+    }
+
+    pub fn deinit(self: Flags) void {
+        for (self.flags) |flag| {
+            self.allocator.free(flag.name);
+        }
+        self.allocator.free(self.flags);
+    }
+};
 
 pub const Metamethods = struct {
     pub const index = "__index";
