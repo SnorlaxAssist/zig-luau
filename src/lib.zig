@@ -86,7 +86,7 @@ pub const DebugInfo = struct {
     what: FnType = undefined,
 
     current_line: ?i32 = null,
-    first_line_defined: ?i32 = null,
+    line_defined: ?i32 = null,
 
     is_vararg: bool = false,
 
@@ -414,7 +414,7 @@ pub const State = struct {
     pub fn LuauToState(luau: *Luau) *LuaState {
         return @ptrCast(luau);
     }
-    pub fn StateToLuau(comptime state: *LuaState) *Luau {
+    pub fn StateToLuau(state: *LuaState) *Luau {
         return @ptrCast(state);
     }
 };
@@ -1336,13 +1336,13 @@ pub const Luau = struct {
     }
 
     /// Gets information about a specific function or function invocation.
-    pub fn getInfo(luau: *Luau, level: i32, options: DebugInfo.Options, info: *DebugInfo) void {
+    pub fn getInfo(luau: *Luau, level: i32, options: DebugInfo.Options, info: *DebugInfo) i32 {
         const str = options.toString();
 
         var ar: Debug = undefined;
 
         // should never fail because we are controlling options with the struct param
-        _ = c.lua_getinfo(stateCast(luau), level, &str, &ar);
+        const res = c.lua_getinfo(stateCast(luau), level, &str, &ar);
         // std.debug.assert( != 0);
 
         // copy data into a struct
@@ -1354,7 +1354,7 @@ pub const Luau = struct {
             info.source = std.mem.span(ar.source);
             // TODO: short_src figureit out
             @memcpy(&info.short_src, ar.short_src[0..c.LUA_IDSIZE]);
-            info.first_line_defined = ar.linedefined;
+            info.line_defined = ar.linedefined;
             info.what = blk: {
                 const what = std.mem.span(ar.what);
                 if (std.mem.eql(u8, "Luau", what)) break :blk .luau;
@@ -1364,6 +1364,7 @@ pub const Luau = struct {
                 unreachable;
             };
         }
+        return res;
     }
 
     /// Gets information about a local variable
@@ -1771,6 +1772,10 @@ pub const Luau = struct {
     /// Open the buffer standard library
     pub fn openBuffer(luau: *Luau) void {
         _ = c.luaopen_buffer(stateCast(luau));
+    }
+
+    pub fn callbacks(luau: *Luau) [*c]c.lua_Callbacks {
+        return c.lua_callbacks(stateCast(luau));
     }
 
     pub fn sandbox(luau: *Luau) void {
