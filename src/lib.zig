@@ -1357,7 +1357,7 @@ pub const Luau = struct {
             info.line_defined = ar.linedefined;
             info.what = blk: {
                 const what = std.mem.span(ar.what);
-                if (std.mem.eql(u8, "Luau", what)) break :blk .luau;
+                if (std.mem.eql(u8, "Lua", what)) break :blk .luau;
                 if (std.mem.eql(u8, "C", what)) break :blk .c;
                 if (std.mem.eql(u8, "main", what)) break :blk .main;
                 if (std.mem.eql(u8, "tail", what)) break :blk .tail;
