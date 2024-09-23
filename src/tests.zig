@@ -1464,7 +1464,7 @@ test "State getInfo" {
             try expect(L.getInfo(1, .{ .s = true, .n = true, .l = true }, &ar));
             try expect(ar.what == .luau);
             try std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.name orelse @panic("Failed"));
-            try std.testing.expectEqualSentinel(u8, 0, "[string \"module\"]", ar.short_src);
+            try std.testing.expectEqualStrings("[string \"module\"]", ar.short_src[0..ar.short_src_len]);
             try expect(ar.line_defined == 1);
             return 1;
         }

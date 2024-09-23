@@ -80,7 +80,8 @@ const Debug = c.lua_Debug;
 pub const DebugInfo = struct {
     source: [:0]const u8 = undefined,
     src_len: usize = 0,
-    short_src: [:0]const u8 = undefined,
+    short_src: [c.LUA_IDSIZE:0]u8 = undefined,
+    short_src_len: usize = 0,
 
     name: ?[:0]const u8 = undefined,
     what: FnType = undefined,
@@ -1353,7 +1354,11 @@ pub const Luau = struct {
         }
         if (options.s) {
             info.source = std.mem.span(ar.source);
-            info.short_src = std.mem.span(ar.short_src);
+
+            const short_src: [:0]const u8 = std.mem.span(ar.short_src);
+            @memcpy(info.short_src[0..short_src.len], short_src[0.. :0]);
+            info.short_src_len = short_src.len;
+
             info.line_defined = ar.linedefined;
             info.what = blk: {
                 const what = std.mem.span(ar.what);
