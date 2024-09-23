@@ -1237,7 +1237,7 @@ test "Luau JIT/CodeGen" {
     // Skip this test if the Luau NCG is not supported on machine
     if (!luau.CodeGen.Supported()) return;
 
-    var lua = try Luau.init(&std.heap.c_allocator);
+    var lua = try Luau.init(&std.testing.allocator);
     defer lua.deinit();
     luau.CodeGen.Create(lua);
 
@@ -1437,4 +1437,39 @@ test "SetFlags" {
             },
         }
     }
+}
+
+test "State getInfo" {
+    var lua = try Luau.init(&std.testing.allocator);
+    defer lua.deinit();
+
+    lua.openBase();
+
+    const src =
+        \\function MyFunction()
+        \\  func()
+        \\end
+        \\
+        \\MyFunction()
+    ;
+    const bc = try luau.compile(testing.allocator, src, .{
+        .debug_level = 2,
+        .optimization_level = 2,
+    });
+    defer testing.allocator.free(bc);
+
+    lua.setGlobalFn("func", struct {
+        fn inner(L: *Luau) !i32 {
+            var ar: luau.DebugInfo = undefined;
+            try expect(L.getInfo(1, .{ .s = true, .n = true, .l = true }, &ar));
+            try expect(ar.what == .luau);
+            try std.testing.expectEqualSentinel(u8, 0, "MyFunction", ar.name orelse @panic("Failed"));
+            try expect(ar.line_defined == 1);
+            return 1;
+        }
+    }.inner);
+
+    try lua.loadBytecode("module", bc);
+
+    try lua.pcall(0, 1, 0); // CALL main()
 }

@@ -1336,13 +1336,14 @@ pub const Luau = struct {
     }
 
     /// Gets information about a specific function or function invocation.
-    pub fn getInfo(luau: *Luau, level: i32, options: DebugInfo.Options, info: *DebugInfo) i32 {
+    pub fn getInfo(luau: *Luau, level: i32, options: DebugInfo.Options, info: *DebugInfo) bool {
         const str = options.toString();
 
         var ar: Debug = undefined;
 
         // should never fail because we are controlling options with the struct param
-        const res = c.lua_getinfo(stateCast(luau), level, &str, &ar);
+        if (c.lua_getinfo(stateCast(luau), level, &str, &ar) == 0)
+            return false;
         // std.debug.assert( != 0);
 
         // copy data into a struct
@@ -1364,7 +1365,7 @@ pub const Luau = struct {
                 unreachable;
             };
         }
-        return res;
+        return true;
     }
 
     /// Gets information about a local variable
