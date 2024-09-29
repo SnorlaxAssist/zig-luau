@@ -19,6 +19,7 @@ pub const LUAU_VERSION = config.luau_version;
 const c_FlagGroup = extern struct {
     names: [*c][*c]const u8,
     types: [*c]c_int,
+    size: usize,
 };
 
 /// This function is defined in luau.cpp and must be called to define the assertion printer
@@ -360,8 +361,7 @@ pub const Flags = struct {
 
         const names = cflags.names;
 
-        var i: usize = 0;
-        while (names[i] != null) : (i += 1) {
+        for (0..cflags.size) |i| {
             const name = try allocator.dupe(u8, std.mem.span(names[i]));
             errdefer allocator.free(name);
             const ttype: FlagType = @enumFromInt(cflags.types[i]);

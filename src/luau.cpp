@@ -73,6 +73,7 @@ extern "C" struct FlagGroup
 {
     const char **names;
     int *types;
+    size_t size;
 };
 
 extern "C" FlagGroup zig_luau_getflags(const char *name, size_t nameLen, int value)
@@ -93,7 +94,7 @@ extern "C" FlagGroup zig_luau_getflags(const char *name, size_t nameLen, int val
 
     size_t size = names_list.size();
 
-    const char **names = new const char *[size + 1];
+    const char **names = new const char *[size];
     int *types = new int[size];
 
     int i = 0;
@@ -104,14 +105,12 @@ extern "C" FlagGroup zig_luau_getflags(const char *name, size_t nameLen, int val
         types[i] = types_list[i];
     }
 
-    names[size + 1] = NULL;
-
-    return {names, types};
+    return {names, types, size};
 }
 
 extern "C" void zig_luau_freeflags(FlagGroup group)
 {
-    for (int i = 0; group.names[i] != NULL; i++)
+    for (size_t i = 0; i < group.size; i++)
     {
         free((void *)group.names[i]);
     }
