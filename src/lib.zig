@@ -928,6 +928,11 @@ pub const Luau = struct {
         return @call(.auto, c.lua_pushfstringL, .{ stateCast(luau), fmt.ptr } ++ args);
     }
 
+    /// Push a zig comptime formatted string onto the stack
+    pub fn pushFmtString(luau: *Luau, comptime fmt: []const u8, args: anytype) void {
+        luau.pushString(std.fmt.comptimePrint(fmt, args));
+    }
+
     /// Pushes a zero-terminated string onto the stack
     /// Luau makes a copy of the string so `str` may be freed immediately after return
     pub fn pushString(luau: *Luau, str: [:0]const u8) void {
@@ -1039,14 +1044,43 @@ pub const Luau = struct {
 
     /// Starts and resumes a coroutine in the thread
     pub fn resumeThread(luau: *Luau, from: ?*Luau, num_args: i32) !ResumeStatus {
-        const from_state: ?*LuaState = if (from) |from_val| @ptrCast(from_val) else null;
-        const thread_status = c.lua_resume(stateCast(luau), from_state, num_args);
+        const thread_status = c.lua_resume(
+            stateCast(luau),
+            if (from) |from_val|
+                stateCast(from_val)
+            else
+                null,
+            num_args,
+        );
         switch (thread_status) {
             StatusCode.err_runtime => return error.Runtime,
             StatusCode.err_memory => return error.Memory,
             StatusCode.err_error => return error.MsgHandler,
             else => return @enumFromInt(thread_status),
         }
+    }
+
+    /// Yielded thread is resumed with an error, and the error object is at the top of the stack
+    pub fn resumeThreadError(luau: *Luau, from: ?*Luau) !ResumeStatus {
+        const thread_status = c.lua_resumeerror(
+            stateCast(luau),
+            if (from) |state|
+                stateCast(state)
+            else
+                null,
+        );
+        switch (thread_status) {
+            StatusCode.err_runtime => return error.Runtime,
+            StatusCode.err_memory => return error.Memory,
+            StatusCode.err_error => return error.MsgHandler,
+            else => return @enumFromInt(thread_status),
+        }
+    }
+
+    /// Resume a thread with an error and a zig comptime formatted message
+    pub inline fn resumeThreadErrorFmt(luau: *Luau, from: ?*Luau, comptime fmt: []const u8, args: anytype) !ResumeStatus {
+        luau.pushFmtString(fmt, args);
+        return luau.resumeThreadError(from);
     }
 
     /// Resets thread
@@ -1537,6 +1571,12 @@ pub const Luau = struct {
     pub fn raiseErrorStr(luau: *Luau, fmt: [:0]const u8, args: anytype) noreturn {
         _ = @call(.auto, c.luaL_errorL, .{ stateCast(luau), fmt.ptr } ++ args);
         unreachable;
+    }
+
+    /// Raises an error with zig comptime formatted string
+    pub fn raiseErrorFmt(luau: *Luau, comptime fmt: []const u8, args: anytype) noreturn {
+        luau.pushFmtString(fmt, args);
+        luau.raiseError();
     }
 
     pub fn loadBytecode(luau: *Luau, chunkname: [:0]const u8, bytecode: []const u8) !void {

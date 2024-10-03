@@ -244,6 +244,11 @@ test "type of and getting values" {
     try expect(lua.isString(-1));
     try expectEqualStrings("hello world 10", try lua.toString(-1));
 
+    lua.pushFmtString("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
+    try expectEqual(.string, lua.typeOf(-1));
+    try expect(lua.isString(-1));
+    try expectEqualStrings("hello world 10", try lua.toString(-1));
+
     lua.pushValue(2);
     try expectEqual(.boolean, lua.typeOf(-1));
     try expect(lua.isBoolean(-1));
@@ -840,6 +845,17 @@ test "args and errors" {
     lua.pushFunction(raisesError, "Error");
     try expectError(error.Runtime, lua.pcall(0, 0, 0));
     try expectEqualStrings("some error zig!", try lua.toString(-1));
+
+    const raisesFmtError = struct {
+        fn inner(l: *Luau) i32 {
+            l.raiseErrorFmt("some fmt error {s}!", .{"zig"});
+            unreachable;
+        }
+    }.inner;
+
+    lua.pushFunction(raisesFmtError, "ErrorFmt");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
+    try expectEqualStrings("some fmt error zig!", try lua.toString(-1));
 }
 
 test "objectLen" {
@@ -1473,4 +1489,68 @@ test "State getInfo" {
     try lua.loadBytecode("module", bc);
 
     try lua.pcall(0, 1, 0); // CALL main()
+}
+
+test "yielding error" {
+    {
+        var lua = try Luau.init(&testing.allocator);
+        defer lua.deinit();
+
+        lua.openBase();
+        lua.openCoroutine();
+
+        const src =
+            \\local ok, res = pcall(foo)
+            \\assert(not ok)
+            \\assert(res == "error")
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debug_level = 2,
+            .optimization_level = 2,
+        });
+        defer testing.allocator.free(bc);
+
+        lua.setGlobalFn("foo", struct {
+            fn inner(L: *Luau) !i32 {
+                return L.yield(0);
+            }
+        }.inner);
+
+        try lua.loadBytecode("module", bc);
+
+        try expectEqual(.yield, try lua.resumeThread(lua, 0));
+
+        lua.pushString("error");
+        try expectEqual(.ok, try lua.resumeThreadError(lua));
+    }
+
+    {
+        var lua = try Luau.init(&testing.allocator);
+        defer lua.deinit();
+
+        lua.openBase();
+        lua.openCoroutine();
+
+        const src =
+            \\local ok, res = pcall(foo)
+            \\assert(not ok)
+            \\assert(res == "fmt error 10")
+        ;
+        const bc = try luau.compile(testing.allocator, src, .{
+            .debug_level = 2,
+            .optimization_level = 2,
+        });
+        defer testing.allocator.free(bc);
+
+        lua.setGlobalFn("foo", struct {
+            fn inner(L: *Luau) !i32 {
+                return L.yield(0);
+            }
+        }.inner);
+
+        try lua.loadBytecode("module", bc);
+
+        try expectEqual(.yield, try lua.resumeThread(lua, 0));
+        try expectEqual(.ok, try lua.resumeThreadErrorFmt(lua, "fmt error {d}", .{10}));
+    }
 }
