@@ -244,10 +244,22 @@ test "type of and getting values" {
     try expect(lua.isString(-1));
     try expectEqualStrings("hello world 10", try lua.toString(-1));
 
-    lua.pushFmtString("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
+    // Comptime known
+    try lua.pushFmtString("{s} {s} {d}", .{ "hello", "world", @as(i32, 10) });
     try expectEqual(.string, lua.typeOf(-1));
     try expect(lua.isString(-1));
     try expectEqualStrings("hello world 10", try lua.toString(-1));
+
+    // Runtime known
+    const arg1 = try std.testing.allocator.dupe(u8, "Hello");
+    defer std.testing.allocator.free(arg1);
+    const arg2 = try std.testing.allocator.dupe(u8, "World");
+    defer std.testing.allocator.free(arg2);
+
+    try lua.pushFmtString("{s} {s} {d}", .{ arg1, arg2, @as(i32, 10) });
+    try expectEqual(.string, lua.typeOf(-1));
+    try expect(lua.isString(-1));
+    try expectEqualStrings("Hello World 10", try lua.toString(-1));
 
     lua.pushValue(2);
     try expectEqual(.boolean, lua.typeOf(-1));
@@ -847,8 +859,8 @@ test "args and errors" {
     try expectEqualStrings("some error zig!", try lua.toString(-1));
 
     const raisesFmtError = struct {
-        fn inner(l: *Luau) i32 {
-            l.raiseErrorFmt("some fmt error {s}!", .{"zig"});
+        fn inner(l: *Luau) !i32 {
+            try l.raiseErrorFmt("some fmt error {s}!", .{"zig"});
             unreachable;
         }
     }.inner;

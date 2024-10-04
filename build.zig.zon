@@ -1,11 +1,16 @@
 .{
     .name = "zig-luau",
-    .version = "0.2.7",
+    .version = "0.2.8",
     .dependencies = .{
         .luau = .{
             .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.645.tar.gz",
             .hash = "12203031ea7842a24748b59faf200de1b4f379ea44463659094c10fe5ca7b2871ab4",
         },
     },
-    .paths = .{""},
+    .paths = .{
+        "src",
+        "license",
+        "build.zig",
+        "build.zig.zon",
+    },
 }

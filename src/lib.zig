@@ -928,9 +928,20 @@ pub const Luau = struct {
         return @call(.auto, c.lua_pushfstringL, .{ stateCast(luau), fmt.ptr } ++ args);
     }
 
+    inline fn isArgComptimeKnown(value: anytype) bool {
+        return @typeInfo(@TypeOf(.{value})).Struct.fields[0].is_comptime;
+    }
+
     /// Push a zig comptime formatted string onto the stack
-    pub fn pushFmtString(luau: *Luau, comptime fmt: []const u8, args: anytype) void {
-        luau.pushString(std.fmt.comptimePrint(fmt, args));
+    pub fn pushFmtString(luau: *Luau, comptime fmt: []const u8, args: anytype) !void {
+        if (isArgComptimeKnown(args))
+            luau.pushLString(std.fmt.comptimePrint(fmt, args))
+        else {
+            const lua_allocator = luau.allocator();
+            const str = try std.fmt.allocPrint(lua_allocator, fmt, args);
+            defer lua_allocator.free(str);
+            luau.pushLString(str);
+        }
     }
 
     /// Pushes a zero-terminated string onto the stack
@@ -1079,7 +1090,7 @@ pub const Luau = struct {
 
     /// Resume a thread with an error and a zig comptime formatted message
     pub inline fn resumeThreadErrorFmt(luau: *Luau, from: ?*Luau, comptime fmt: []const u8, args: anytype) !ResumeStatus {
-        luau.pushFmtString(fmt, args);
+        try luau.pushFmtString(fmt, args);
         return luau.resumeThreadError(from);
     }
 
@@ -1574,8 +1585,8 @@ pub const Luau = struct {
     }
 
     /// Raises an error with zig comptime formatted string
-    pub fn raiseErrorFmt(luau: *Luau, comptime fmt: []const u8, args: anytype) noreturn {
-        luau.pushFmtString(fmt, args);
+    pub fn raiseErrorFmt(luau: *Luau, comptime fmt: []const u8, args: anytype) !noreturn {
+        try luau.pushFmtString(fmt, args);
         luau.raiseError();
     }
 
