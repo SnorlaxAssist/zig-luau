@@ -24,6 +24,18 @@ pub fn build(b: *Build) !void {
         .root_source_file = b.path("src/lib.zig"),
     });
 
+    // Luau C Headers
+    const headers = b.addTranslateC(.{
+        .root_source_file = b.path("src/luau.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    headers.addIncludeDir(luau_dep.path("Compiler/include").getPath(b));
+    headers.addIncludeDir(luau_dep.path("VM/include").getPath(b));
+    if (!target.result.isWasm()) headers.addIncludeDir(luau_dep.path("CodeGen/include").getPath(b));
+
+    luauModule.addImport("c", headers.createModule());
+
     // Expose build configuration to the zig-luau module
     const config = b.addOptions();
     config.addOption(bool, "use_4_vector", use_4_vector);

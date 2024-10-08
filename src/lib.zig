@@ -1,13 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const c = @cImport({
-    @cInclude("lua.h");
-    @cInclude("lualib.h");
-
-    @cInclude("luacode.h");
-    if (!builtin.cpu.arch.isWasm()) @cInclude("luacodegen.h");
-});
+const c = @import("c");
 
 const config = @import("config");
 
