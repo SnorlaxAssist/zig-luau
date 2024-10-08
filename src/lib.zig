@@ -34,6 +34,10 @@ extern "c" fn zig_luau_getflag_int([*]const u8, usize, *c_int) bool;
 
 extern "c" fn zig_luau_getflags() c_FlagGroup;
 
+// Internal API
+extern "c" fn zig_luau_luaD_checkstack(*LuaState, c_int) void;
+extern "c" fn zig_luau_expandstacklimit(*LuaState, c_int) void;
+
 // NCG Workarounds - Minimal Debug Support for NCG
 /// Luau.CodeGen mock __register_frame for a workaround Luau NCG
 export fn __register_frame(frame: *const u8) void {
@@ -1839,6 +1843,16 @@ pub const Luau = struct {
     pub fn setSafeEnv(luau: *Luau, idx: i32, enabled: bool) void {
         c.lua_setsafeenv(stateCast(luau), idx, if (enabled) 1 else 0);
     }
+
+    // Internal API functions
+    pub const sys = struct {
+        pub fn luaD_checkstack(luau: *Luau, n: i32) void {
+            zig_luau_luaD_checkstack(stateCast(luau), n);
+        }
+        pub fn luaD_expandstacklimit(luau: *Luau, n: i32) void {
+            zig_luau_expandstacklimit(stateCast(luau), n);
+        }
+    };
 };
 
 /// A string buffer allowing for Zig code to build Luau strings piecemeal

@@ -1,4 +1,5 @@
 #include "Luau/Common.h"
+#include "ldo.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -116,4 +117,14 @@ extern "C" void zig_luau_freeflags(FlagGroup group)
     }
     delete[] group.names;
     delete[] group.types;
+}
+
+// Internal API
+extern "C" void zig_luau_luaD_checkstack(lua_State *L, int n)
+{
+    luaD_checkstack(L, n);
+}
+extern "C" void zig_luau_expandstacklimit(lua_State *L, int n)
+{
+    expandstacklimit(L, L->top + n);
 }
