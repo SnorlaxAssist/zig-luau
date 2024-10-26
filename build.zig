@@ -3,8 +3,8 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 648, .patch = 0 };
-const VERSION_HASH = "122084904c4d8188aaa401ae8a47028867b3d2ec81353ebce1b7f8bb84d19b099b1b";
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 649, .patch = 0 };
+const VERSION_HASH = "12206a8f187141e57bb941a57ee225df9ff30d4b369dec417203af4fa7543079ee5e";
 
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
