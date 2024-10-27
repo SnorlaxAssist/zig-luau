@@ -603,8 +603,8 @@ pub const Luau = struct {
         return c.lua_gc(stateCast(luau), c.LUA_GCSETSTEPSIZE, size);
     }
 
-    pub fn newUserdataTagged(luau: *Luau, comptime T: type, size: usize, tag: c_int) !*T {
-        if (c.lua_newuserdatatagged(stateCast(luau), size, tag)) |ptr| return opaqueCast(T, ptr);
+    pub fn newUserdataTagged(luau: *Luau, comptime T: type, tag: c_int) !*T {
+        if (c.lua_newuserdatatagged(stateCast(luau), @sizeOf(T), tag)) |ptr| return opaqueCast(T, ptr);
         return error.Fail;
     }
 
@@ -620,8 +620,15 @@ pub const Luau = struct {
         return @ptrCast(@alignCast(ptr));
     }
 
-    pub fn setUserdataDtor(luau: *Luau, tag: c_int, dtor: c.lua_Destructor) void {
-        c.lua_setuserdatadtor(stateCast(luau), tag, dtor);
+    pub fn setUserdataDtor(luau: *Luau, comptime T: type, tag: c_int, comptime dtorfn: ?*const fn (ptr: *T) void) void {
+        if (dtorfn) |dtor| {
+            const dtorCfn = struct {
+                fn inner(ptr: ?*anyopaque) callconv(.C) void {
+                    if (ptr) |p| @call(.always_inline, dtor, .{opaqueCast(T, p)});
+                }
+            }.inner;
+            c.lua_setuserdatadtor(stateCast(luau), tag, dtorCfn);
+        } else c.lua_setuserdatadtor(stateCast(luau), tag, null);
     }
 
     pub fn setUserdataTag(luau: *Luau, idx: c_int, tag: c_int) void {
@@ -1695,7 +1702,6 @@ pub const Luau = struct {
     }
 
     /// Creates and returns a reference in the table at index `index` for the object on the top of the stack
-    /// Pops the object
     pub fn ref(luau: *Luau, index: i32) !i32 {
         const ret = c.lua_ref(stateCast(luau), index);
         return if (ret == ref_nil) error.Fail else ret;
