@@ -620,11 +620,11 @@ pub const Luau = struct {
         return @ptrCast(@alignCast(ptr));
     }
 
-    pub fn setUserdataDtor(luau: *Luau, comptime T: type, tag: c_int, comptime dtorfn: ?*const fn (ptr: *T) void) void {
+    pub fn setUserdataDtor(luau: *Luau, comptime T: type, tag: c_int, comptime dtorfn: ?*const fn (L: *Luau, ptr: *T) void) void {
         if (dtorfn) |dtor| {
             const dtorCfn = struct {
-                fn inner(ptr: ?*anyopaque) callconv(.C) void {
-                    if (ptr) |p| @call(.always_inline, dtor, .{opaqueCast(T, p)});
+                fn inner(state: ?*LuaState, ptr: ?*anyopaque) callconv(.C) void {
+                    if (ptr) |p| @call(.always_inline, dtor, .{ @as(*Luau, @ptrCast(state.?)), opaqueCast(T, p) });
                 }
             }.inner;
             c.lua_setuserdatadtor(stateCast(luau), tag, dtorCfn);
