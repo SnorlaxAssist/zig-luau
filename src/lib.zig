@@ -639,6 +639,10 @@ pub const Luau = struct {
         return c.lua_getuserdatadtor(stateCast(luau), tag);
     }
 
+    pub fn getUserdataTag(luau: *Luau, index: i32) c_int {
+        return c.lua_userdatatag(stateCast(luau), index);
+    }
+
     pub fn getLightUserdataName(luau: *Luau, tag: c_int) ![*:0]const u8 {
         if (c.lua_getlightuserdataname(stateCast(luau), tag)) |name| return name;
         return error.Fail;
