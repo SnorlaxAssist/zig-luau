@@ -603,9 +603,10 @@ pub const Luau = struct {
         return c.lua_gc(stateCast(luau), c.LUA_GCSETSTEPSIZE, size);
     }
 
-    pub fn newUserdataTagged(luau: *Luau, comptime T: type, tag: c_int) !*T {
-        if (c.lua_newuserdatatagged(stateCast(luau), @sizeOf(T), tag)) |ptr| return opaqueCast(T, ptr);
-        return error.Fail;
+    pub fn newUserdataTagged(luau: *Luau, comptime T: type, tag: c_int) *T {
+        // safe to .? because this function throws a Luau error on out of memory
+        const ptr = c.lua_newuserdatatagged(stateCast(luau), @sizeOf(T), tag).?;
+        return opaqueCast(T, ptr);
     }
 
     pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn (ptr: *T) void) *T {
