@@ -3,8 +3,8 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 649, .patch = 0 };
-const VERSION_HASH = "12206a8f187141e57bb941a57ee225df9ff30d4b369dec417203af4fa7543079ee5e";
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 650, .patch = 0 };
+const VERSION_HASH = "1220f1d160ed4f07aab186b7f19dada806df33bf746fa975a6e7ec103109fd529687";
 
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
@@ -270,6 +270,7 @@ const LUAU_VM_SOURCE_FILES = [_][]const u8{
     "VM/src/ludata.cpp",
     "VM/src/lutf8lib.cpp",
     "VM/src/lvmexecute.cpp",
+    "VM/src/lveclib.cpp",
     "VM/src/lvmload.cpp",
     "VM/src/lvmutils.cpp",
 };

@@ -172,6 +172,7 @@ pub const Libs = packed struct {
     os: bool = false,
     bit32: bool = false,
     buffer: bool = false,
+    vector: bool = false,
 };
 
 /// The type of the opaque structure that points to a thread and the state of a Luau interpreter
@@ -1776,6 +1777,7 @@ pub const Luau = struct {
         if (libs.bit32) luau.requireF(c.LUA_BITLIBNAME, c.luaopen_bit32);
         if (libs.utf8) luau.requireF(c.LUA_UTF8LIBNAME, c.luaopen_utf8);
         if (libs.buffer) luau.requireF(c.LUA_BUFFERLIBNAME, c.luaopen_buffer);
+        if (libs.vector) luau.requireF(c.LUA_VECLIBNAME, c.luaopen_vector);
     }
 
     fn requireF(luau: *Luau, name: [:0]const u8, comptime func: anytype) void {
@@ -1837,6 +1839,11 @@ pub const Luau = struct {
     /// Open the buffer standard library
     pub fn openBuffer(luau: *Luau) void {
         _ = c.luaopen_buffer(stateCast(luau));
+    }
+
+     /// Open the vector standard library
+    pub fn openVector(luau: *Luau) void {
+        _ = c.luaopen_vector(stateCast(luau));
     }
 
     pub fn callbacks(luau: *Luau) [*c]c.lua_Callbacks {
