@@ -1,6 +1,6 @@
 .{
     .name = "zig-luau",
-    .version = "0.2.9",
+    .version = "0.2.10",
     .dependencies = .{
         .luau = .{
             .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.650.tar.gz",

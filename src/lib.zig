@@ -1841,7 +1841,7 @@ pub const Luau = struct {
         _ = c.luaopen_buffer(stateCast(luau));
     }
 
-     /// Open the vector standard library
+    /// Open the vector standard library
     pub fn openVector(luau: *Luau) void {
         _ = c.luaopen_vector(stateCast(luau));
     }
@@ -2004,7 +2004,12 @@ pub fn EFntoZigFn(comptime f: ZigEFn) CFn {
     return toCFn(struct {
         fn inner(state: *Luau) i32 {
             // this is called by Luau, state should never be null
-            if (@call(.always_inline, f, .{state})) |res| return res else |err| state.raiseErrorStr("%s", .{@errorName(err).ptr});
+            if (@call(.always_inline, f, .{state})) |res|
+                return res
+            else |err| switch (err) {
+                error.RaiseLuauError => state.raiseError(),
+                else => state.raiseErrorStr("%s", .{@errorName(err).ptr}),
+            }
         }
     }.inner);
 }
