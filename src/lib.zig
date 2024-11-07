@@ -2006,7 +2006,7 @@ pub fn EFntoZigFn(comptime f: ZigEFn) CFn {
             // this is called by Luau, state should never be null
             if (@call(.always_inline, f, .{state})) |res|
                 return res
-            else |err| switch (err) {
+            else |err| switch (@as(anyerror, @errorCast(err))) {
                 error.RaiseLuauError => state.raiseError(),
                 else => state.raiseErrorStr("%s", .{@errorName(err).ptr}),
             }
