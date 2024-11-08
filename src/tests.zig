@@ -668,6 +668,7 @@ test "yielding no continuation" {
     try expectEqual(.suspended, lua.statusThread(thread));
     try expectEqual(1, thread.toInteger(-1));
     thread.resetThread();
+    try expect(thread.isThreadReset());
     try expectEqual(.finished, lua.statusThread(thread));
 }
 

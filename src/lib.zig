@@ -1110,6 +1110,11 @@ pub const Luau = struct {
         c.lua_resetthread(stateCast(luau));
     }
 
+    /// Returns boolean indicating if the thread is reset
+    pub fn isThreadReset(luau: *Luau) bool {
+        return c.lua_isthreadreset(stateCast(luau)) != 0;
+    }
+
     /// Returns the coroutine status of given thread
     pub fn statusThread(luau: *Luau, co: *Luau) CoroutineStatus {
         return @enumFromInt(c.lua_costatus(stateCast(luau), stateCast(co)));
