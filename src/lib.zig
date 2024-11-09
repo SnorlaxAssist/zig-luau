@@ -934,7 +934,7 @@ pub const Luau = struct {
                 if (!ptr.is_const) @compileError("Pointer must be constant");
                 const pi = @typeInfo(ptr.child);
                 switch (pi) {
-                    .Fn => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
+                    .@"fn" => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
                     else => @compileError("Pointer must be a pointer to a function"),
                 }
             },
