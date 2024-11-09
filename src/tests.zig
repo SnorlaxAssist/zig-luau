@@ -14,7 +14,8 @@ const expectEqualStrings = testing.expectEqualStrings;
 const expectError = testing.expectError;
 
 fn expectStringContains(actual: []const u8, expected_contains: []const u8) !void {
-    if (std.mem.indexOf(u8, actual, expected_contains) == null) return;
+    if (std.mem.indexOf(u8, actual, expected_contains) == null)
+        return;
     return error.TestExpectedStringContains;
 }
 
@@ -44,6 +45,10 @@ fn failing_alloc(data: ?*anyopaque, ptr: ?*anyopaque, osize: usize, nsize: usize
     _ = osize;
     _ = nsize;
     return null;
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }
 
 test "initialization" {
@@ -1566,4 +1571,30 @@ test "yielding error" {
         try expectEqual(.yield, try lua.resumeThread(lua, 0));
         try expectEqual(.ok, try lua.resumeThreadErrorFmt(lua, "fmt error {d}", .{10}));
     }
+}
+
+test "Ast/Parser - HotComments" {
+    const allocator = testing.allocator;
+
+    const src =
+        \\--!HotComments
+        \\--!optimize 2
+    ;
+
+    const luau_allocator = luau.Ast.Allocator.Allocator.init();
+    defer luau_allocator.deinit();
+
+    const names = luau.Ast.Lexer.AstNameTable.init(luau_allocator);
+    defer names.deinit();
+
+    const result = luau.Ast.Parser.parse(src, names, luau_allocator);
+    defer result.deinit();
+
+    const hotcomments = try result.getHotcomments(allocator);
+    defer hotcomments.deinit();
+
+    try expectEqual(2, hotcomments.values.len);
+
+    try expectEqualStrings("HotComments", hotcomments.values[0].content);
+    try expectEqualStrings("optimize 2", hotcomments.values[1].content);
 }

@@ -19,10 +19,10 @@ pub fn build(b: *Build) !void {
 
     const use_4_vector = b.option(bool, "use_4_vector", "Build Luau to use 4-vectors instead of the default 3-vector.") orelse false;
 
-    // Zig module
-    const luauModule = b.addModule("zig-luau", .{
-        .root_source_file = b.path("src/lib.zig"),
-    });
+    // Expose build configuration to the zig-luau module
+    const config = b.addOptions();
+    config.addOption(bool, "use_4_vector", use_4_vector);
+    config.addOption(std.SemanticVersion, "luau_version", LUAU_VERSION);
 
     // Luau C Headers
     const headers = b.addTranslateC(.{
@@ -30,29 +30,31 @@ pub fn build(b: *Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    headers.addIncludeDir(luau_dep.path("Compiler/include").getPath(b));
-    headers.addIncludeDir(luau_dep.path("VM/include").getPath(b));
-    if (!target.result.isWasm()) headers.addIncludeDir(luau_dep.path("CodeGen/include").getPath(b));
+    headers.addIncludePath(luau_dep.path("Compiler/include"));
+    headers.addIncludePath(luau_dep.path("VM/include"));
+    if (!target.result.isWasm())
+        headers.addIncludePath(luau_dep.path("CodeGen/include"));
 
-    luauModule.addImport("c", headers.createModule());
-
-    // Expose build configuration to the zig-luau module
-    const config = b.addOptions();
-    config.addOption(bool, "use_4_vector", use_4_vector);
-    config.addOption(std.SemanticVersion, "luau_version", LUAU_VERSION);
-    luauModule.addOptions("config", config);
-
-    const vector_size: usize = if (use_4_vector) 4 else 3;
-    luauModule.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
+    const c_module = headers.createModule();
 
     const lib = try buildLuau(b, target, luau_dep, optimize, use_4_vector);
     b.installArtifact(lib);
 
-    luauModule.addIncludePath(luau_dep.path("Compiler/include"));
-    luauModule.addIncludePath(luau_dep.path("VM/include"));
-    if (!target.result.isWasm()) luauModule.addIncludePath(luau_dep.path("CodeGen/include"));
+    // Zig module
+    const luauModule = b.addModule("zig-luau", .{
+        .root_source_file = b.path("src/lib.zig"),
+    });
 
-    luauModule.linkLibrary(lib);
+    try buildAndLinkModule(b, target, luau_dep, luauModule, config, c_module, lib, use_4_vector);
+
+    // Tests
+    const lib_tests = b.addTest(.{
+        .root_source_file = b.path("src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    try buildAndLinkModule(b, target, luau_dep, &lib_tests.root_module, config, c_module, lib, use_4_vector);
 
     // Tests
     const tests = b.addTest(.{
@@ -62,8 +64,10 @@ pub fn build(b: *Build) !void {
     });
     tests.root_module.addImport("luau", luauModule);
 
+    const run_lib_tests = b.addRunArtifact(lib_tests);
     const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run zigluau tests");
+    const test_step = b.step("test", "Run zig-luau tests");
+    test_step.dependOn(&run_lib_tests.step);
     test_step.dependOn(&run_tests.step);
 
     // Examples
@@ -88,7 +92,8 @@ pub fn build(b: *Build) !void {
 
         const run_cmd = b.addRunArtifact(exe);
         run_cmd.step.dependOn(b.getInstallStep());
-        if (b.args) |args| run_cmd.addArgs(args);
+        if (b.args) |args|
+            run_cmd.addArgs(args);
 
         const run_step = b.step(b.fmt("run-example-{s}", .{example[0]}), b.fmt("Run {s} example", .{example[0]}));
         run_step.dependOn(&run_cmd.step);
@@ -113,8 +118,39 @@ pub fn build(b: *Build) !void {
     docs_step.dependOn(&install_docs.step);
 }
 
+fn buildAndLinkModule(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    module: anytype,
+    config: *Step.Options,
+    c_module: *Build.Module,
+    lib: *Step.Compile,
+    use_4_vector: bool,
+) !void {
+    module.addImport("c", c_module);
+
+    module.addOptions("config", config);
+
+    const vector_size: usize = if (use_4_vector) 4 else 3;
+    module.addCMacro("LUA_VECTOR_SIZE", b.fmt("{}", .{vector_size}));
+
+    module.addIncludePath(dependency.path("Compiler/include"));
+    module.addIncludePath(dependency.path("VM/include"));
+    if (!target.result.isWasm())
+        module.addIncludePath(dependency.path("CodeGen/include"));
+
+    module.linkLibrary(lib);
+}
+
 /// Luau has diverged enough from Lua (C++, project structure, ...) that it is easier to separate the build logic
-fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Dependency, optimize: std.builtin.OptimizeMode, use_4_vector: bool) !*Step.Compile {
+fn buildLuau(
+    b: *Build,
+    target: Build.ResolvedTarget,
+    dependency: *Build.Dependency,
+    optimize: std.builtin.OptimizeMode,
+    use_4_vector: bool,
+) !*Step.Compile {
     const lib = b.addStaticLibrary(.{
         .name = "luau",
         .target = target,
@@ -122,12 +158,18 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
         .version = LUAU_VERSION,
     });
 
-    for (LUAU_Ast_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
-    for (LUAU_Common_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
-    for (LUAU_Compiler_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Ast_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Common_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
+    for (LUAU_Compiler_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
     // CodeGen is not supported on WASM
-    if (!target.result.isWasm()) for (LUAU_CodeGen_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
-    for (LUAU_VM_HEADERS_DIRS) |dir| lib.addIncludePath(dependency.path(dir));
+    if (!target.result.isWasm())
+        for (LUAU_CodeGen_HEADERS_DIRS) |dir|
+            lib.addIncludePath(dependency.path(dir));
+    for (LUAU_VM_HEADERS_DIRS) |dir|
+        lib.addIncludePath(dependency.path(dir));
 
     const FLAGS = [_][]const u8{
         // setjmp.h compile error in Wasm
@@ -140,19 +182,30 @@ fn buildLuau(b: *Build, target: Build.ResolvedTarget, dependency: *Build.Depende
 
     lib.linkLibCpp();
 
-    for (LUAU_Ast_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
-    for (LUAU_Compiler_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_Ast_SOURCE_FILES) |file|
+        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_Compiler_SOURCE_FILES) |file|
+        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
     // CodeGen is not supported on WASM
-    if (!target.result.isWasm()) for (LUAU_CodeGen_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
-    for (LUAU_VM_SOURCE_FILES) |file| lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    if (!target.result.isWasm())
+        for (LUAU_CodeGen_SOURCE_FILES) |file|
+            lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
+    for (LUAU_VM_SOURCE_FILES) |file|
+        lib.addCSourceFile(.{ .file = dependency.path(file), .flags = &FLAGS });
 
     lib.addCSourceFile(.{ .file = b.path("src/luau.cpp"), .flags = &FLAGS });
+
+    // Modules
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Allocator.cpp"), .flags = &FLAGS });
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Lexer.cpp"), .flags = &FLAGS });
+    lib.addCSourceFile(.{ .file = b.path("src/Ast/Parser.cpp"), .flags = &FLAGS });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
     lib.installHeader(dependency.path("VM/include/lualib.h"), "lualib.h");
     lib.installHeader(dependency.path("VM/include/luaconf.h"), "luaconf.h");
-    if (!target.result.isWasm()) lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
+    if (!target.result.isWasm())
+        lib.installHeader(dependency.path("CodeGen/include/luacodegen.h"), "luacodegen.h");
 
     return lib;
 }

@@ -3,6 +3,22 @@ const builtin = @import("builtin");
 
 const c = @import("c");
 
+pub const Ast = struct {
+    pub const Allocator = @import("Ast/Allocator.zig");
+    pub const Lexer = @import("Ast/Lexer.zig");
+    pub const Parser = @import("Ast/Parser.zig");
+
+    test {
+        _ = Ast.Allocator;
+        _ = Ast.Lexer;
+        _ = Ast.Parser;
+    }
+};
+
+test {
+    _ = Ast;
+}
+
 const config = @import("config");
 
 /// The length of Luau vector values, either 3 or 4.
@@ -21,15 +37,11 @@ extern "c" fn zig_registerAssertionHandler() void;
 
 /// This function is defined in luau.cpp and ensures Zig uses the correct free when compiling luau code
 extern "c" fn zig_luau_free(ptr: *anyopaque) void;
-
 extern "c" fn zig_luau_freeflags(c_FlagGroup) void;
 
 extern "c" fn zig_luau_setflag_bool([*]const u8, usize, bool) bool;
-
 extern "c" fn zig_luau_setflag_int([*]const u8, usize, c_int) bool;
-
 extern "c" fn zig_luau_getflag_bool([*]const u8, usize, *bool) bool;
-
 extern "c" fn zig_luau_getflag_int([*]const u8, usize, *c_int) bool;
 
 extern "c" fn zig_luau_getflags() c_FlagGroup;
@@ -906,8 +918,8 @@ pub const Luau = struct {
     fn pushZigFunction(luau: *Luau, comptime fnType: std.builtin.Type.Fn, comptime zig_fn: anytype, name: [:0]const u8) void {
         const ri = @typeInfo(fnType.return_type orelse @compileError("Fn must return something"));
         switch (ri) {
-            .Int => |_| return luau.pushClosure(toCFn(@as(ZigFn, zig_fn)), name, 0),
-            .ErrorUnion => |_| return luau.pushClosure(EFntoZigFn(@as(ZigEFn, zig_fn)), name, 0),
+            .int => |_| return luau.pushClosure(toCFn(@as(ZigFn, zig_fn)), name, 0),
+            .error_union => |_| return luau.pushClosure(EFntoZigFn(@as(ZigEFn, zig_fn)), name, 0),
             else => {},
         }
         @compileError("Unsupported Fn Return type");
@@ -916,8 +928,8 @@ pub const Luau = struct {
         const t = @TypeOf(zig_fn);
         const ti = @typeInfo(t);
         switch (ti) {
-            .Fn => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
-            .Pointer => |ptr| {
+            .@"fn" => |Fn| return pushZigFunction(luau, Fn, zig_fn, name),
+            .pointer => |ptr| {
                 // *const fn ...
                 if (!ptr.is_const) @compileError("Pointer must be constant");
                 const pi = @typeInfo(ptr.child);
@@ -940,7 +952,7 @@ pub const Luau = struct {
     }
 
     inline fn isArgComptimeKnown(value: anytype) bool {
-        return @typeInfo(@TypeOf(.{value})).Struct.fields[0].is_comptime;
+        return @typeInfo(@TypeOf(.{value})).@"struct".fields[0].is_comptime;
     }
 
     /// Push a zig comptime formatted string onto the stack
