@@ -3,8 +3,8 @@ const std = @import("std");
 const Build = std.Build;
 const Step = std.Build.Step;
 
-const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 650, .patch = 0 };
-const VERSION_HASH = "1220f1d160ed4f07aab186b7f19dada806df33bf746fa975a6e7ec103109fd529687";
+const LUAU_VERSION = std.SemanticVersion{ .major = 0, .minor = 651, .patch = 0 };
+const VERSION_HASH = "1220bcd384152421ac7bfd492b3398c5d36a6699a64de431e817e0555f0df69f16e4";
 
 pub fn build(b: *Build) !void {
     // Remove the default install and uninstall steps
@@ -162,6 +162,7 @@ const LUAU_Ast_HEADERS_DIRS = [_][]const u8{
 };
 const LUAU_Ast_SOURCE_FILES = [_][]const u8{
     "Ast/src/Ast.cpp",
+    "Ast/src/Allocator.cpp",
     "Ast/src/Confusables.cpp",
     "Ast/src/Lexer.cpp",
     "Ast/src/Location.cpp",
