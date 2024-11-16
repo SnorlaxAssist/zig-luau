@@ -3,8 +3,8 @@
     .version = "0.3.0",
     .dependencies = .{
         .luau = .{
-            .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.651.tar.gz",
-            .hash = "1220bcd384152421ac7bfd492b3398c5d36a6699a64de431e817e0555f0df69f16e4",
+            .url = "https://github.com/luau-lang/luau/archive/refs/tags/0.652.tar.gz",
+            .hash = "12205fa48c45a1833769257bc1d2dfda339e4dac52f5d45062fc71e98c216f8f3738",
         },
     },
     .paths = .{
