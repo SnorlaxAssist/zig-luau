@@ -874,6 +874,26 @@ test "args and errors" {
     lua.pushFunction(raisesFmtError, "ErrorFmt");
     try expectError(error.Runtime, lua.pcall(0, 0, 0));
     try expectEqualStrings("some fmt error zig!", try lua.toString(-1));
+
+    const FmtError = struct {
+        fn inner(l: *Luau) !i32 {
+            return l.ErrorFmt("some err fmt error {s}!", .{"zig"});
+        }
+    }.inner;
+
+    lua.pushFunction(FmtError, "ErrorFmt");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
+    try expectEqualStrings("some err fmt error zig!", try lua.toString(-1));
+
+    const Error = struct {
+        fn inner(l: *Luau) !i32 {
+            return l.Error("some error");
+        }
+    }.inner;
+
+    lua.pushFunction(Error, "Error");
+    try expectError(error.Runtime, lua.pcall(0, 0, 0));
+    try expectEqualStrings("some error", try lua.toString(-1));
 }
 
 test "objectLen" {

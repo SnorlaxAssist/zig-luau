@@ -1606,6 +1606,18 @@ pub const Luau = struct {
         return @as([*]T, @ptrCast(@alignCast(ptr)))[0..size];
     }
 
+    pub fn Error(luau: *Luau, comptime message: []const u8) anyerror {
+        luau.pushLString(message);
+        return error.RaiseLuauError;
+    }
+
+    pub fn ErrorFmt(luau: *Luau, comptime fmt: []const u8, args: anytype) anyerror {
+        luau.pushFmtString(fmt, args) catch |err| {
+            luau.pushLString(@errorName(err));
+        };
+        return error.RaiseLuauError;
+    }
+
     /// Raises an error
     pub fn raiseErrorStr(luau: *Luau, fmt: [:0]const u8, args: anytype) noreturn {
         _ = @call(.auto, c.luaL_errorL, .{ stateCast(luau), fmt.ptr } ++ args);
