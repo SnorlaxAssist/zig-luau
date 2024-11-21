@@ -645,6 +645,10 @@ pub const Luau = struct {
         } else c.lua_setuserdatadtor(stateCast(luau), tag, null);
     }
 
+    pub fn setUserdataMetatable(luau: *Luau, tag: c_int, idx: i32) void {
+        c.lua_setuserdatametatable(stateCast(luau), tag, idx);
+    }
+
     pub fn setUserdataTag(luau: *Luau, idx: c_int, tag: c_int) void {
         c.lua_setuserdatatag(stateCast(luau), idx, tag);
     }
