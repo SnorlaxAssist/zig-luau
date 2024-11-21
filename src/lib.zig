@@ -622,6 +622,12 @@ pub const Luau = struct {
         return opaqueCast(T, ptr);
     }
 
+    pub fn newUserdataTaggedWithMetatable(luau: *Luau, comptime T: type, tag: c_int) *T {
+        // safe to .? because this function throws a Luau error on out of memory
+        const ptr = c.lua_newuserdatataggedwithmetatable(stateCast(luau), @sizeOf(T), tag).?;
+        return opaqueCast(T, ptr);
+    }
+
     pub fn newUserdataDtor(luau: *Luau, comptime T: type, comptime dtorfn: *const fn (ptr: *T) void) *T {
         const dtorCfn = struct {
             fn inner(ptr: ?*anyopaque) callconv(.C) void {
