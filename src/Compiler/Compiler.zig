@@ -11,9 +11,10 @@ pub fn compileParseResult(
     allocator: std.mem.Allocator,
     parseResult: *Parser.ParseResult,
     namesTable: *Lexer.AstNameTable,
+    options: ?*c.lua_CompileOptions,
 ) error{OutOfMemory}![]const u8 {
     var size: usize = 0;
-    const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, null, null) orelse return error.OutOfMemory;
+    const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, options, null) orelse return error.OutOfMemory;
     defer zig_Luau_Compiler_compile_free(@ptrCast(@constCast(bytes)));
     return try allocator.dupe(u8, bytes[0..size]);
 }
@@ -37,7 +38,7 @@ test compileParseResult {
     defer parseResult.deinit();
 
     const zig_allocator = std.testing.allocator;
-    const bytes = try compileParseResult(zig_allocator, parseResult, astNameTable);
+    const bytes = try compileParseResult(zig_allocator, parseResult, astNameTable, null);
     defer zig_allocator.free(bytes);
 
     try std.testing.expect(bytes[0] == 0);
