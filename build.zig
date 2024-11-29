@@ -158,6 +158,7 @@ fn buildLuau(
         .version = LUAU_VERSION,
     });
 
+    lib.addIncludePath(b.path("src/Lib"));
     for (LUAU_Ast_HEADERS_DIRS) |dir|
         lib.addIncludePath(dependency.path(dir));
     for (LUAU_Common_HEADERS_DIRS) |dir|
@@ -178,6 +179,7 @@ fn buildLuau(
         "-DLUACODE_API=extern\"C\"",
         "-DLUACODEGEN_API=extern\"C\"",
         if (use_4_vector) "-DLUA_VECTOR_SIZE=4" else "",
+        if (target.result.isWasm()) "-fexceptions" else "",
     };
 
     lib.linkLibCpp();

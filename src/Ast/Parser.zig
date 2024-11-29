@@ -36,25 +36,29 @@ const zig_ParseResult_Errors = extern struct {
     size: usize,
 };
 
-extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, Lexer.AstNameTable.C, Allocator.C) ParseResult.C;
-extern "c" fn zig_Luau_Ast_ParseResult_free(ParseResult.C) void;
-extern "c" fn zig_Luau_Ast_ParseResult_get_hotcomments(ParseResult.C) zig_ParseResult_HotComments;
+extern "c" fn zig_Luau_Ast_Parser_parse([*]const u8, usize, *Lexer.AstNameTable, *Allocator) *ParseResult;
+extern "c" fn zig_Luau_Ast_ParseResult_free(*ParseResult) void;
+extern "c" fn zig_Luau_Ast_ParseResult_get_hotcomments(*ParseResult) zig_ParseResult_HotComments;
 extern "c" fn zig_Luau_Ast_ParseResult_free_hotcomments(zig_ParseResult_HotComments) void;
-extern "c" fn zig_Luau_Ast_ParseResult_get_errors(ParseResult.C) zig_ParseResult_Errors;
+extern "c" fn zig_Luau_Ast_ParseResult_get_errors(*ParseResult) zig_ParseResult_Errors;
 extern "c" fn zig_Luau_Ast_ParseResult_free_errors(zig_ParseResult_Errors) void;
+extern "c" fn zig_Luau_Ast_ParseResult_hasNativeFunction(*ParseResult) bool;
+extern "c" fn zig_Luau_Ast_FFlag_LuauNativeAttribute() bool;
 
 pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseResult {
-    return @ptrCast(zig_Luau_Ast_Parser_parse(
+    return zig_Luau_Ast_Parser_parse(
         source.ptr,
         source.len,
-        nameTable.raw(),
-        allocator.raw(),
-    ));
+        nameTable,
+        allocator,
+    );
 }
 
-const ParseResult = struct {
-    pub const C = *align(8) opaque {};
+pub fn nativeAttributeEnabled() bool {
+    return zig_Luau_Ast_FFlag_LuauNativeAttribute();
+}
 
+const ParseResult = opaque {
     pub const HotComment = struct {
         header: bool,
         location: zig_Location,
@@ -89,11 +93,11 @@ const ParseResult = struct {
     };
 
     pub inline fn deinit(self: *ParseResult) void {
-        zig_Luau_Ast_ParseResult_free(self.raw());
+        zig_Luau_Ast_ParseResult_free(self);
     }
 
     pub fn getHotcomments(self: *ParseResult, allocator: std.mem.Allocator) !HotComments {
-        const hotcomments = zig_Luau_Ast_ParseResult_get_hotcomments(self.raw());
+        const hotcomments = zig_Luau_Ast_ParseResult_get_hotcomments(self);
         defer zig_Luau_Ast_ParseResult_free_hotcomments(hotcomments);
 
         const arr = try allocator.alloc(HotComment, hotcomments.size);
@@ -116,7 +120,7 @@ const ParseResult = struct {
     }
 
     pub fn getErrors(self: *ParseResult, allocator: std.mem.Allocator) !ParseErrors {
-        const errors = zig_Luau_Ast_ParseResult_get_errors(self.raw());
+        const errors = zig_Luau_Ast_ParseResult_get_errors(self);
         defer zig_Luau_Ast_ParseResult_free_errors(errors);
 
         const arr = try allocator.alloc(ParseError, errors.size);
@@ -137,52 +141,74 @@ const ParseResult = struct {
         };
     }
 
-    pub inline fn raw(self: *ParseResult) C {
-        return @ptrCast(@alignCast(self));
+    pub fn hasNativeFunction(self: *ParseResult) bool {
+        return zig_Luau_Ast_ParseResult_hasNativeFunction(self);
     }
 };
 
 test ParseResult {
-    var allocator = Allocator.init();
-    defer allocator.deinit();
-
-    var astNameTable = Lexer.AstNameTable.init(allocator);
-    defer astNameTable.deinit();
-
-    const source =
-        \\--!test
-        \\-- This is a test comment
-        \\local x = 
-        \\
-    ;
-
-    var parseResult = parse(source, astNameTable, allocator);
-    defer parseResult.deinit();
-
     {
-        const hotcomments = try parseResult.getHotcomments(std.testing.allocator);
-        defer hotcomments.deinit();
+        var allocator = Allocator.init();
+        defer allocator.deinit();
 
-        try std.testing.expectEqual(1, hotcomments.values.len);
-        const first = hotcomments.values[0];
-        try std.testing.expectEqualStrings("test", first.content);
-        try std.testing.expectEqual(true, first.header);
-        try std.testing.expectEqual(0, first.location.begin.line);
-        try std.testing.expectEqual(0, first.location.begin.column);
-        try std.testing.expectEqual(0, first.location.end.line);
-        try std.testing.expectEqual(7, first.location.end.column);
+        var astNameTable = Lexer.AstNameTable.init(allocator);
+        defer astNameTable.deinit();
+        const source =
+            \\--!test
+            \\-- This is a test comment
+            \\local x = 
+            \\
+        ;
+
+        var parseResult = parse(source, astNameTable, allocator);
+        defer parseResult.deinit();
+
+        if (nativeAttributeEnabled())
+            try std.testing.expect(parseResult.hasNativeFunction() == false);
+
+        {
+            const hotcomments = try parseResult.getHotcomments(std.testing.allocator);
+            defer hotcomments.deinit();
+
+            try std.testing.expectEqual(1, hotcomments.values.len);
+            const first = hotcomments.values[0];
+            try std.testing.expectEqualStrings("test", first.content);
+            try std.testing.expectEqual(true, first.header);
+            try std.testing.expectEqual(0, first.location.begin.line);
+            try std.testing.expectEqual(0, first.location.begin.column);
+            try std.testing.expectEqual(0, first.location.end.line);
+            try std.testing.expectEqual(7, first.location.end.column);
+        }
+
+        {
+            const errors = try parseResult.getErrors(std.testing.allocator);
+            defer errors.deinit();
+
+            try std.testing.expectEqual(1, errors.values.len);
+            const first = errors.values[0];
+            try std.testing.expectEqualStrings("Expected identifier when parsing expression, got <eof>", first.message);
+            try std.testing.expectEqual(3, first.location.begin.line);
+            try std.testing.expectEqual(0, first.location.begin.column);
+            try std.testing.expectEqual(3, first.location.end.line);
+            try std.testing.expectEqual(0, first.location.end.column);
+        }
     }
+    if (nativeAttributeEnabled()) {
+        var allocator = Allocator.init();
+        defer allocator.deinit();
 
-    {
-        const errors = try parseResult.getErrors(std.testing.allocator);
-        defer errors.deinit();
+        var astNameTable = Lexer.AstNameTable.init(allocator);
+        defer astNameTable.deinit();
+        const source =
+            \\@native
+            \\function test()
+            \\end
+            \\
+        ;
 
-        try std.testing.expectEqual(1, errors.values.len);
-        const first = errors.values[0];
-        try std.testing.expectEqualStrings("Expected identifier when parsing expression, got <eof>", first.message);
-        try std.testing.expectEqual(3, first.location.begin.line);
-        try std.testing.expectEqual(0, first.location.begin.column);
-        try std.testing.expectEqual(3, first.location.end.line);
-        try std.testing.expectEqual(0, first.location.end.column);
+        var parseResult = parse(source, astNameTable, allocator);
+        defer parseResult.deinit();
+
+        try std.testing.expect(parseResult.hasNativeFunction() == true);
     }
 }

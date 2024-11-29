@@ -1,21 +1,15 @@
 const std = @import("std");
 
-extern "c" fn zig_Luau_Ast_Allocator_new() Allocator.C;
-extern "c" fn zig_Luau_Ast_Allocator_free(Allocator.C) void;
+extern "c" fn zig_Luau_Ast_Allocator_new() *Allocator;
+extern "c" fn zig_Luau_Ast_Allocator_free(*Allocator) void;
 
-pub const Allocator = struct {
-    pub const C = *align(8) opaque {};
-
+pub const Allocator = opaque {
     pub inline fn init() *Allocator {
-        return @ptrCast(zig_Luau_Ast_Allocator_new());
+        return zig_Luau_Ast_Allocator_new();
     }
 
     pub inline fn deinit(self: *Allocator) void {
-        zig_Luau_Ast_Allocator_free(self.raw());
-    }
-
-    pub inline fn raw(self: *Allocator) C {
-        return @ptrCast(@alignCast(self));
+        zig_Luau_Ast_Allocator_free(self);
     }
 };
 

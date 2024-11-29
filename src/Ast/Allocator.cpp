@@ -1,11 +1,15 @@
+#include <Local.h>
+
 #include "Luau/Allocator.h"
 
-extern "C" Luau::Allocator* zig_Luau_Ast_Allocator_new()
+#define ZIG_LUAU_AST(name) ZIG_FN(Luau_Ast_##name)
+
+ZIG_EXPORT Luau::Allocator* ZIG_LUAU_AST(Allocator_new)()
 {
     return new Luau::Allocator();
 }
 
-extern "C" void zig_Luau_Ast_Allocator_free(Luau::Allocator* value)
+ZIG_EXPORT void ZIG_LUAU_AST(Allocator_free)(Luau::Allocator* value)
 {
     delete value;
 }

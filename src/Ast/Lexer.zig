@@ -1,21 +1,15 @@
 const Allocator = @import("Allocator.zig").Allocator;
 
-extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_new(Allocator.C) AstNameTable.C;
-extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_free(AstNameTable.C) void;
+extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_new(*Allocator) *AstNameTable;
+extern "c" fn zig_Luau_Ast_Lexer_AstNameTable_free(*AstNameTable) void;
 
-pub const AstNameTable = struct {
-    pub const C = *align(8) opaque {};
-
+pub const AstNameTable = opaque {
     pub inline fn init(LuauAllocator: *Allocator) *AstNameTable {
-        return @ptrCast(zig_Luau_Ast_Lexer_AstNameTable_new(LuauAllocator.raw()));
+        return zig_Luau_Ast_Lexer_AstNameTable_new(LuauAllocator);
     }
 
     pub inline fn deinit(self: *AstNameTable) void {
-        zig_Luau_Ast_Lexer_AstNameTable_free(self.raw());
-    }
-
-    pub inline fn raw(self: *AstNameTable) C {
-        return @ptrCast(@alignCast(self));
+        zig_Luau_Ast_Lexer_AstNameTable_free(self);
     }
 };
 
