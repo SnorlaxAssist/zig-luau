@@ -15,6 +15,11 @@ pub const Ast = struct {
     }
 };
 
+pub const Compiler = @import("Compiler/Compiler.zig");
+test {
+    _ = Compiler;
+}
+
 test {
     _ = Ast;
 }

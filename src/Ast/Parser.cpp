@@ -1,13 +1,12 @@
 #include <Local.h>
 
-#include "Luau/Ast.h"
 #include "Luau/Common.h"
+
+#include "Luau/Ast.h"
 #include "Luau/Parser.h"
 #include "Luau/Compiler.h"
 
 #include <vector>
-
-LUAU_FASTFLAG(LuauNativeAttribute);
 
 #define ZIG_LUAU_AST(name) ZIG_FN(Luau_Ast_##name)
 
@@ -185,9 +184,4 @@ ZIG_EXPORT bool ZIG_LUAU_AST(ParseResult_hasNativeFunction)(Luau::ParseResult* v
     FunctionVisitor functionVisitor(functions);
     value->root->visit(&functionVisitor);
     return functionVisitor.hasNativeFunction;
-}
-
-ZIG_EXPORT bool ZIG_LUAU_AST(FFlag_LuauNativeAttribute)()
-{
-    return FFlag::LuauNativeAttribute;
 }

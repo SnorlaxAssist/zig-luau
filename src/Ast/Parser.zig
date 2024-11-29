@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const Allocator = @import("Allocator.zig").Allocator;
 const Lexer = @import("Lexer.zig");
+const Allocator = @import("Allocator.zig").Allocator;
 
 const zig_Position = extern struct {
     line: c_uint,
@@ -43,7 +43,6 @@ extern "c" fn zig_Luau_Ast_ParseResult_free_hotcomments(zig_ParseResult_HotComme
 extern "c" fn zig_Luau_Ast_ParseResult_get_errors(*ParseResult) zig_ParseResult_Errors;
 extern "c" fn zig_Luau_Ast_ParseResult_free_errors(zig_ParseResult_Errors) void;
 extern "c" fn zig_Luau_Ast_ParseResult_hasNativeFunction(*ParseResult) bool;
-extern "c" fn zig_Luau_Ast_FFlag_LuauNativeAttribute() bool;
 
 pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *Allocator) *ParseResult {
     return zig_Luau_Ast_Parser_parse(
@@ -54,11 +53,7 @@ pub fn parse(source: []const u8, nameTable: *Lexer.AstNameTable, allocator: *All
     );
 }
 
-pub fn nativeAttributeEnabled() bool {
-    return zig_Luau_Ast_FFlag_LuauNativeAttribute();
-}
-
-const ParseResult = opaque {
+pub const ParseResult = opaque {
     pub const HotComment = struct {
         header: bool,
         location: zig_Location,
@@ -163,9 +158,7 @@ test ParseResult {
         var parseResult = parse(source, astNameTable, allocator);
         defer parseResult.deinit();
 
-        if (nativeAttributeEnabled())
-            try std.testing.expect(parseResult.hasNativeFunction() == false);
-
+        try std.testing.expect(parseResult.hasNativeFunction() == false);
         {
             const hotcomments = try parseResult.getHotcomments(std.testing.allocator);
             defer hotcomments.deinit();
@@ -193,7 +186,7 @@ test ParseResult {
             try std.testing.expectEqual(0, first.location.end.column);
         }
     }
-    if (nativeAttributeEnabled()) {
+    {
         var allocator = Allocator.init();
         defer allocator.deinit();
 

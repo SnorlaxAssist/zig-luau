@@ -201,6 +201,7 @@ fn buildLuau(
     lib.addCSourceFile(.{ .file = b.path("src/Ast/Allocator.cpp"), .flags = &FLAGS });
     lib.addCSourceFile(.{ .file = b.path("src/Ast/Lexer.cpp"), .flags = &FLAGS });
     lib.addCSourceFile(.{ .file = b.path("src/Ast/Parser.cpp"), .flags = &FLAGS });
+    lib.addCSourceFile(.{ .file = b.path("src/Compiler/Compiler.cpp"), .flags = &FLAGS });
 
     // It may not be as likely that other software links against Luau, but might as well expose these anyway
     lib.installHeader(dependency.path("VM/include/lua.h"), "lua.h");
