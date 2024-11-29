@@ -7,14 +7,35 @@ const c = @import("c");
 extern "c" fn zig_Luau_Compiler_compile_ParseResult(*const Parser.ParseResult, *const Lexer.AstNameTable, *usize, ?*c.lua_CompileOptions, ?*anyopaque) ?[*]const u8;
 extern "c" fn zig_Luau_Compiler_compile_free(*anyopaque) void;
 
+pub const CompileOptions = struct {
+    optimization_level: i32 = 1,
+    debug_level: i32 = 1,
+    coverage_level: i32 = 0,
+    /// global builtin to construct vectors; disabled by default (<vector_lib>.<vector_ctor>)
+    vector_lib: ?[*:0]const u8 = null,
+    vector_ctor: ?[*:0]const u8 = null,
+    /// vector type name for type tables; disabled by default
+    vector_type: ?[*:0]const u8 = null,
+    /// null-terminated array of globals that are mutable; disables the import optimization for fields accessed through these
+    mutable_globals: ?[*:null]const ?[*:0]const u8 = null,
+};
+
 pub fn compileParseResult(
     allocator: std.mem.Allocator,
     parseResult: *Parser.ParseResult,
     namesTable: *Lexer.AstNameTable,
-    options: ?*c.lua_CompileOptions,
+    options: ?CompileOptions,
 ) error{OutOfMemory}![]const u8 {
     var size: usize = 0;
-    const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, options, null) orelse return error.OutOfMemory;
+    var opts = if (options) |o| c.lua_CompileOptions{
+        .optimizationLevel = o.optimization_level,
+        .debugLevel = o.debug_level,
+        .coverageLevel = o.coverage_level,
+        .vectorLib = o.vector_lib,
+        .vectorCtor = o.vector_ctor,
+        .mutableGlobals = o.mutable_globals,
+    } else null;
+    const bytes = zig_Luau_Compiler_compile_ParseResult(parseResult, namesTable, &size, if (opts) |*o| o else null, null) orelse return error.OutOfMemory;
     defer zig_Luau_Compiler_compile_free(@ptrCast(@constCast(bytes)));
     return try allocator.dupe(u8, bytes[0..size]);
 }

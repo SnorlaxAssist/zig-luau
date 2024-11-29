@@ -2146,18 +2146,7 @@ pub fn EFntoZigFn(comptime f: ZigEFn) CFn {
 
 /// Zig wrapper for Luau lua_CompileOptions that uses the same defaults as Luau if
 /// no compile options is specified.
-pub const CompileOptions = struct {
-    optimization_level: i32 = 1,
-    debug_level: i32 = 1,
-    coverage_level: i32 = 0,
-    /// global builtin to construct vectors; disabled by default (<vector_lib>.<vector_ctor>)
-    vector_lib: ?[*:0]const u8 = null,
-    vector_ctor: ?[*:0]const u8 = null,
-    /// vector type name for type tables; disabled by default
-    vector_type: ?[*:0]const u8 = null,
-    /// null-terminated array of globals that are mutable; disables the import optimization for fields accessed through these
-    mutable_globals: ?[*:null]const ?[*:0]const u8 = null,
-};
+pub const CompileOptions = Compiler.CompileOptions;
 
 /// Compile luau source into bytecode, return callee owned buffer allocated through the given allocator.
 pub fn compile(allocator: Allocator, source: []const u8, options: CompileOptions) ![]const u8 {
