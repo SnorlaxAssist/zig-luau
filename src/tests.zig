@@ -463,10 +463,10 @@ test "warn fn" {
     defer lua.deinit();
 
     const warnFn = struct {
-        fn inner(L: *Luau) i32 {
+        fn inner(L: *Luau) void {
             const msg = L.toString(1) catch unreachable;
-            if (!std.mem.eql(u8, msg, "this will be caught by the warnFn")) std.debug.panic("test failed", .{});
-            return 0;
+            if (!std.mem.eql(u8, msg, "this will be caught by the warnFn"))
+                std.debug.panic("test failed", .{});
         }
     }.inner;
 
@@ -1044,8 +1044,8 @@ test "buffers" {
     lua.openBase();
     lua.openBuffer();
 
-    const buf = try lua.newBuffer(12);
-    try lua.pushBuffer("Hello, world 2");
+    const buf = lua.newBuffer(12);
+    lua.pushBuffer("Hello, world 2");
 
     try expectEqual(12, buf.len);
 
@@ -1289,7 +1289,8 @@ test "Vectors" {
 
 test "Luau JIT/CodeGen" {
     // Skip this test if the Luau NCG is not supported on machine
-    if (!luau.CodeGen.Supported()) return;
+    if (!luau.CodeGen.Supported())
+        return;
 
     var lua = try Luau.init(&std.testing.allocator);
     defer lua.deinit();
@@ -1297,12 +1298,22 @@ test "Luau JIT/CodeGen" {
 
     lua.openBase();
 
+    lua.setGlobalFn("test", struct {
+        fn inner(L: *Luau) !i32 {
+            L.pushBoolean(L.isNative(L.optInteger(1) orelse 0));
+            return 1;
+        }
+    }.inner);
+
     const src =
-        \\function MyFunction()
-        \\  return 133
+        \\
+        \\local function func(): ()
+        \\  assert(native == test())
+        \\  return
         \\end
         \\
-        \\return MyFunction()
+        \\pcall(func)
+        \\
     ;
     const bc = try luau.compile(testing.allocator, src, .{
         .debug_level = 2,
@@ -1314,7 +1325,7 @@ test "Luau JIT/CodeGen" {
 
     luau.CodeGen.Compile(lua, -1);
 
-    try lua.pcall(0, 1, 0); // CALL main()
+    try lua.pcall(0, 0, 0); // CALL main()
 }
 
 test "Readonly table" {
@@ -1415,7 +1426,7 @@ test "getFieldObject" {
         else => @panic("Failed"),
     }
 
-    _ = try lua.newBuffer(2);
+    _ = lua.newBuffer(2);
     lua.pushNil();
     switch (try lua.typeOfObj(-2)) {
         .buffer => |buf| try expectEqualStrings(&[_]u8{ 0, 0 }, buf),

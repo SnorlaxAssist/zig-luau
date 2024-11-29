@@ -128,3 +128,7 @@ extern "C" void zig_luau_expandstacklimit(lua_State *L, int n)
 {
     expandstacklimit(L, L->top + n);
 }
+extern "C" int zig_luau_luaG_isnative(lua_State *L, int level)
+{
+    return luaG_isnative(L, level);
+}
