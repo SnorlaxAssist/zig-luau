@@ -1629,3 +1629,28 @@ test "Ast/Parser - HotComments" {
     try expectEqualStrings("HotComments", hotcomments.values[0].content);
     try expectEqualStrings("optimize 2", hotcomments.values[1].content);
 }
+
+test "Thread Data" {
+    const Sample = struct {
+        a: i32,
+        b: i32,
+    };
+
+    var lua = try Luau.init(&testing.allocator);
+    defer lua.deinit();
+
+    const zigFn = struct {
+        fn inner(L: *Luau) !i32 {
+            const data = L.getThreadData(Sample) catch unreachable; // should exists
+            try expectEqual(10, data.a);
+            try expectEqual(20, data.b);
+            return 0;
+        }
+    }.inner;
+
+    var data = Sample{ .a = 10, .b = 20 };
+    lua.setThreadData(Sample, &data);
+
+    lua.pushFunction(zigFn, "zigFn");
+    try lua.pcall(0, 0, 0);
+}

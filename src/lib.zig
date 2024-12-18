@@ -674,6 +674,16 @@ pub const Luau = struct {
     pub inline fn setLightUserdataName(luau: *Luau, tag: c_int, name: [:0]const u8) void {
         c.lua_setlightuserdataname(stateCast(luau), tag, name.ptr);
     }
+
+    pub inline fn setThreadData(luau: *Luau, comptime T: type, data: *T) void {
+        c.lua_setthreaddata(stateCast(luau), opaqueCast(anyopaque, data));
+    }
+
+    pub fn getThreadData(luau: *Luau, comptime T: type) !*T {
+        if (c.lua_getthreaddata(stateCast(luau))) |ptr| return opaqueCast(T, ptr);
+        return error.Fail;
+    }
+
     /// Returns the memory allocation function of a given state
     /// If data is not null, it is set to the opaque pointer given when the allocator function was set
     pub inline fn getAllocFn(luau: *Luau, data: ?**anyopaque) AllocFn {
@@ -1886,6 +1896,10 @@ pub const Luau = struct {
 
     pub inline fn breakpoint(luau: *Luau, funcindex: i32, line: i32, enabled: bool) i32 {
         return c.lua_breakpoint(stateCast(luau), funcindex, line, if (enabled) 1 else 0);
+    }
+
+    pub inline fn gc_dump(luau: *Luau, funcindex: i32, line: i32, enabled: bool) i32 {
+        return c.luaG_dump(stateCast(luau), funcindex, line, if (enabled) 1 else 0);
     }
 
     pub fn getCoverage(
