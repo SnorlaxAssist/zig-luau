@@ -54,7 +54,7 @@ pub fn build(b: *Build) !void {
         .optimize = optimize,
     });
 
-    try buildAndLinkModule(b, target, luau_dep, &lib_tests.root_module, config, c_module, lib, use_4_vector);
+    try buildAndLinkModule(b, target, luau_dep, lib_tests.root_module, config, c_module, lib, use_4_vector);
 
     // Tests
     const tests = b.addTest(.{
@@ -122,7 +122,7 @@ fn buildAndLinkModule(
     b: *Build,
     target: Build.ResolvedTarget,
     dependency: *Build.Dependency,
-    module: anytype,
+    module: *Build.Module,
     config: *Step.Options,
     c_module: *Build.Module,
     lib: *Step.Compile,
